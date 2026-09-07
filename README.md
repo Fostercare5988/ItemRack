@@ -52,6 +52,7 @@ Originally created by Gello, with modern enhancements and maintenance by **[Fost
 - `/itemrack equip <setname>` — Equip a saved gear set
 - `/itemrack toggle <setname>` — Toggle a gear set
 - `/itemrack reset` — Reset bar position and settings
+- `/itemrack reset events` — Restore default automated events from `Events.lua`
 - `/itemrack reset everything` — Restore addon to default state
 
 ### Creating a Set
@@ -63,6 +64,37 @@ Originally created by Gello, with modern enhancements and maintenance by **[Fost
 - `Alt + Click` any slot on your character sheet to add or remove it from the bar.
 - `Alt + Click` your 3D character model on the sheet to add the Sets button to the bar.
 - `Alt + Drag` to move the bar when locked.
+
+---
+
+## Banking Integration
+
+When interacting with a bank:
+- Items in your bank that belong to a set or slot menu are outlined with a distinct **blue border**.
+- Selecting a banked item from an item or set flyout menu automatically pulls it into your inventory (space permitting).
+- Selecting an unbanked item while at the bank deposits it into your bank bags.
+
+---
+
+## Event Scripting
+
+ItemRack includes a full event-driven scripting engine for automated gear swaps (mounting, shapeshifting, auras, low mana, combat stances).
+
+Detailed scripting API documentation, debounce configuration, and examples are available in the **[Event Scripting Guide](EVENTS.md)**.
+
+---
+
+## Changelog
+
+### Version 1.99.0 (Modern Engine Stack)
+- **High-Cohesion Modular Architecture**: Eradicated the legacy `localization.lua` misnomer. Decoupled UI strings and keybindings into `Constants.lua` and automated set triggers into `Events.lua`.
+- **Decoupled Load Order**: Initialized defensive tables (`ItemRack = ItemRack or {}`) across all modules, eliminating temporal load-order coupling in `ItemRack.toc`.
+- **Direct Engine Mount Detection**: Replaced legacy tooltip-scanning hacks with native C++ `IsMounted()` and `C_UnitAuras`.
+- **Lock-Sequenced Combat Queue**: Synchronized post-combat swaps to the `ITEM_LOCK_CHANGED` engine event with automatic timeouts, completely eliminating concurrent swap race conditions.
+- **Modern Lua 5.1 Syntax**: Replaced all 27 instances of `table.getn(t)` with the native `#` bytecode operator and manual loop wipes with native C++ `table.wipe(t)`.
+- **Library Purge**: Eradicated obsolete legacy Ace2, Dewdrop, and Tablet library dependencies (`ItemRackFu`).
+- **In-Game Help Redesign**: Updated help documentation in the `[?]` tab with explicit engine prerequisites and author attribution.
+- **Documentation Overhaul**: Modernized event scripting manual into standard Markdown (`EVENTS.md`) and eradicated legacy text files.
 
 ---
 
