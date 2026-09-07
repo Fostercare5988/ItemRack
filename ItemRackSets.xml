@@ -948,7 +948,7 @@
 					</Layer>
 				</Layers>
 				<Frames>
-					<ScrollFrame name="ItemRack_Help" inherits="UIPanelScrollFrameTemplate">
+					<ScrollFrame name="ItemRack_Help" inherits="UIPanelScrollFrameTemplate" enableMouseWheel="true">
 						<Size>
 							<AbsDimension x="150" y="246"/>
 						</Size>
@@ -959,6 +959,14 @@
 								</Offset>
 							</Anchor>
 						</Anchors>
+						<Scripts>
+							<OnMouseWheel>
+								local scrollBar = ItemRack_HelpScrollBar
+								if scrollBar then
+									scrollBar:SetValue(scrollBar:GetValue() - (arg1 * 20))
+								end
+							</OnMouseWheel>
+						</Scripts>
 						<ScrollChild>
 							<Frame name="ItemRack_Help_ScrollChildFrame" enableMouse="true">
 								<Size>
@@ -972,7 +980,7 @@
 									</Anchor>
 								</Anchors>
 								<Frames>
-									<EditBox name="ItemRack_Help_EditBox" letters="2000" multiLine="true" enableMouse="false" autoFocus="false">
+									<EditBox name="ItemRack_Help_EditBox" letters="4000" multiLine="true" enableMouse="false" autoFocus="false">
 										<Size>
 											<AbsDimension x="150" y="246"/>
 										</Size>
@@ -981,8 +989,11 @@
 										</Anchors>
 										<Scripts>
 											<OnLoad>
-												this:SetText("ItemRack version "..ItemRack_Version.."\n\n"..ItemRackText.HELP)
+												this:SetText("ItemRack v"..ItemRack_Version.." (Enhanced Edition)\nUpdated by Fostercare5988\nOriginal by Gello\n\n"..ItemRackText.HELP)
 											</OnLoad>
+											<OnShow>
+												this:SetText("ItemRack v"..ItemRack_Version.." (Enhanced Edition)\nUpdated by Fostercare5988\nOriginal by Gello\n\n"..ItemRackText.HELP)
+											</OnShow>
 											<OnEditFocusGained>
 												this:ClearFocus()
 											</OnEditFocusGained>

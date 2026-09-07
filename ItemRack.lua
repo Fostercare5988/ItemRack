@@ -46,7 +46,7 @@ ItemRack_Settings = {			-- These settings are for all users:
 -- all event scripts are stored globally in this saved variable.  Defaults are in Events.lua
 ItemRack_Events = {}
 
-ItemRack_Version = 1.98
+ItemRack_Version = 1.99
 
 --[[ Local Variables ]]--
 local _G = _G or getfenv(0)
