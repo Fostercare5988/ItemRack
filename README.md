@@ -1,8 +1,13 @@
 # ItemRack (Enhanced 1.12.1 Client)
 
+[![Interface](https://img.shields.io/badge/Interface-1.12.1%20%28Build%205875%29-blue.svg)](https://github.com/Fostercare5988/ItemRack)
+[![Version](https://img.shields.io/badge/Version-1.99-brightgreen.svg)](https://github.com/Fostercare5988/ItemRack)
+[![Engine](https://img.shields.io/badge/Engine-ClassicAPI%20%7C%20SuperWoW%20%7C%20DXVK-orange.svg)](https://github.com/Fostercare5988/ItemRack)
+[![License](https://img.shields.io/badge/License-GPL--2.0-green.svg)](LICENSE)
+
 **ItemRack** is an inventory management, item set, and quick-swapping addon engineered for the **World of Warcraft 1.12.1 Enhanced Engine Stack** (ClassicAPI v1.14.0+, SuperWoW v2.2+, DXVK Vulkan runtime).
 
-Originally created by Gello, with modern enhancements and maintenance by McPewPew and the community.
+Originally created by Gello, with modern enhancements and maintenance by **[Fostercare5988](https://github.com/Fostercare5988)** (with contributions from McPewPew, Khalil, and the community).
 
 ---
 
@@ -63,6 +68,7 @@ Originally created by Gello, with modern enhancements and maintenance by McPewPe
 
 ## Credits & License
 
-- Original Author: **Gello**
-- Enhanced Client Updates: **McPewPew**, **Khalil**, **Sleepybear**
-- License: GNU General Public License v2 (GPL-2.0)
+- **Original Author**: Gello
+- **Modernization & Maintenance**: [Fostercare5988](https://github.com/Fostercare5988)
+- **Enhanced Client Contributors**: McPewPew, Khalil, Sleepybear
+- **License**: GNU General Public License v2 (GPL-2.0)
