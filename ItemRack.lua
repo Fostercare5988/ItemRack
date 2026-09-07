@@ -41,6 +41,7 @@ ItemRack_Settings = {			-- These settings are for all users:
 	BigCooldown = "OFF",		-- whether cooldown numbers are huge (like Cooldown Count)
 	SetLabels = "ON",			-- whether labels show on set icons
 	AutoToggle = "OFF",			-- whether sets automatically toggle when chosen
+	CharSheetMenu = "ON",		-- whether to display swap flyout when hovering character sheet slots
 }
 
 -- all event scripts are stored globally in this saved variable.  Defaults are in Events.lua
@@ -184,6 +185,7 @@ ItemRack.OptInfo = {
 	["ItemRack_ShowCloakText" ] = { text="Cloak", type="Label" },
 	["ItemRack_Opt_SetLabels"] = { text=ItemRackText.OPT_SETLABELS_TEXT, tooltip=ItemRackText.OPT_SETLABELS_TOOLTIP, info="SetLabels" },
 	["ItemRack_Opt_AutoToggle"] = { text=ItemRackText.OPT_AUTOTOGGLE_TEXT, tooltip=ItemRackText.OPT_AUTOTOGGLE_TOOLTIP, info="AutoToggle" },
+	["ItemRack_Opt_CharSheetMenu"] = { text=ItemRackText.OPT_CHARSHEETMENU_TEXT, tooltip=ItemRackText.OPT_CHARSHEETMENU_TOOLTIP, type="Check", info="CharSheetMenu" },
 }
 
 -- numerically indexed list of options for scrollable options window
@@ -202,6 +204,7 @@ ItemRack.OptScroll = {
 	{ idx="ItemRack_Opt_NotifyThirty", dependency="ItemRack_Opt_Notify" },
 	{ idx="ItemRack_Opt_MenuShift" },
 	{ idx="ItemRack_Opt_AutoToggle" },
+	{ idx="ItemRack_Opt_CharSheetMenu" },
 	{ idx="ItemRack_Opt_ShowEmpty" },
 	{ idx="ItemRack_Opt_AllowHidden" },
 	{ idx="ItemRack_Opt_Soulbound" },
@@ -436,8 +439,20 @@ function ItemRack_DockMenu(invslot,relativeTo)
 		ItemRack_MenuFrame:SetScale(ItemRack_Users[user].MainScale)
 	end
 
+	local xoffset = dock_info("mx")
+	local yoffset = dock_info("my") + (ynudge and ynudge or 0)
+	if relativeTo == "CHARACTERSHEET" then
+		if invslot == 16 or invslot == 17 or invslot == 18 or invslot == 0 then
+			xoffset = -8
+			yoffset = -2
+		else
+			xoffset = 0
+			yoffset = 8
+		end
+	end
+
 	ItemRack_MenuFrame:ClearAllPoints()
-	ItemRack_MenuFrame:SetPoint(ItemRack.MenuDock,attachTo,ItemRack.MainDock,dock_info("mx"),dock_info("my")+ (ynudge and ynudge or 0))
+	ItemRack_MenuFrame:SetPoint(ItemRack.MenuDock,attachTo,ItemRack.MainDock,xoffset,yoffset)
 end
 
 -- v1="Left1" or "Right1" up to "Left30" or "Right30"
@@ -673,7 +688,7 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 			end
 			sort_menu(idx)
 
-			if ItemRack_Settings.ShowEmpty=="ON" and GetInventoryItemLink("player",invslot) and not (ItemRack_Settings.RightClick=="ON" and (invslot==13 or invslot==14)) then
+			if ItemRack_Settings.ShowEmpty=="ON" and GetInventoryItemLink("player",invslot) and (relativeTo=="CHARACTERSHEET" or not (ItemRack_Settings.RightClick=="ON" and (invslot==13 or invslot==14))) then
 				-- add an empty slot to the menu
 				local _,id = GetInventorySlotInfo(string.gsub(ItemRack.Indexes[invslot].paperdoll_slot,"Character",""))
 				populate_baggeditems(idx,nil,nil,"(empty)",id)
@@ -1558,9 +1573,22 @@ function newItemRack_PaperDollItemSlotButton_OnEnter()
 
 	oldItemRack_PaperDollItemSlotButton_OnEnter()
 
-	if IsAltKeyDown() then
-		if id and not InRepairMode() then
+	if id and not InRepairMode() and not CursorHasItem() then
+		if ItemRack_Settings.CharSheetMenu ~= "OFF" then
 			ItemRack_BuildMenu(id,"CHARACTERSHEET")
+			if ItemRack_MenuFrame:IsVisible() and GameTooltip:IsVisible() then
+				if id == 16 or id == 17 or id == 18 or id == 0 then
+					GameTooltip:ClearAllPoints()
+					GameTooltip:SetPoint("BOTTOMLEFT", this, "TOPLEFT", 0, 5)
+				else
+					GameTooltip:ClearAllPoints()
+					GameTooltip:SetPoint("TOPLEFT", ItemRack_MenuFrame, "TOPRIGHT", 6, 0)
+					if GameTooltip:GetRight() and UIParent:GetWidth() and GameTooltip:GetRight() > UIParent:GetWidth() then
+						GameTooltip:ClearAllPoints()
+						GameTooltip:SetPoint("TOPRIGHT", this, "TOPLEFT", -6, 0)
+					end
+				end
+			end
 		end
 	end
 end
@@ -1912,10 +1940,12 @@ function ItemRack_Menu_OnClick(arg1)
 		return
 	end
 
-	if ItemRack_Settings.RightClick=="ON" and arg1=="LeftButton" and ItemRack.InvOpen==14 then
-		ItemRack.InvOpen = 13
-	elseif ItemRack_Settings.RightClick=="ON" and arg1=="RightButton" and ItemRack.InvOpen==13 then
-		ItemRack.InvOpen = 14
+	if ItemRack.MenuDockedTo ~= "CHARACTERSHEET" then
+		if ItemRack_Settings.RightClick=="ON" and arg1=="LeftButton" and ItemRack.InvOpen==14 then
+			ItemRack.InvOpen = 13
+		elseif ItemRack_Settings.RightClick=="ON" and arg1=="RightButton" and ItemRack.InvOpen==13 then
+			ItemRack.InvOpen = 14
+		end
 	end
 
 	if (ItemRack_Settings.AllowHidden=="ON" or ItemRack.InvOpen==20) and IsAltKeyDown() and ItemRack.MenuDockedTo~="CHARACTERSHEET" then
@@ -2001,10 +2031,12 @@ function ItemRack_Menu_OnClick(arg1)
 				PickupContainerItem(bag,slot)
 			end
 		end
-		SetDesaturation(_G["ItemRackInv"..ItemRack.InvOpen.."Icon"],1)
+		local invIcon = _G["ItemRackInv"..ItemRack.InvOpen.."Icon"]
+		if invIcon then SetDesaturation(invIcon,1) end
 
 		if ItemRack_SetsFrame:IsVisible() then
-			SetDesaturation(_G["ItemRack_Sets_Inv"..ItemRack.InvOpen.."Icon"],1)
+			local setIcon = _G["ItemRack_Sets_Inv"..ItemRack.InvOpen.."Icon"]
+			if setIcon then SetDesaturation(setIcon,1) end
 		end
 
 		if not IsShiftKeyDown() or ItemRack_Settings.RightClick=="OFF" then
@@ -2026,6 +2058,7 @@ function ItemRack_MenuFrame_OnHide()
 		_G["ItemRackInv"..i]:UnlockHighlight()
 	end
 	ItemRack.InvOpen = nil
+	ItemRack.MenuDockedTo = nil
 end
 
 --[[ Tooltips ]]--
@@ -2073,6 +2106,12 @@ function ItemRack_Menu_Tooltip()
 		ItemRack.TooltipSlot = ItemRack.BaggedItems[id].slot
 
 		Rack.StartTimer("TooltipUpdate",0)
+	elseif ItemRack.BaggedItems[id].name == "(empty)" then
+		set_tooltip_anchor(this)
+		GameTooltip:ClearLines()
+		GameTooltip:AddLine("Unequip", 1, 1, 1)
+		GameTooltip:AddLine("Click to unequip this slot.", 0.7, 0.7, 0.7)
+		GameTooltip:Show()
 	end
 end
 
@@ -5113,6 +5152,19 @@ function Rack.MenuFrame()
 	  (string.sub(GetMouseFocus():GetName() or "",1,17)=="ItemRack_Sets_Inv") and
 	  GetMouseFocus():GetAlpha()>.5 then
 		over = 1
+	end
+
+	if ItemRack.MenuDockedTo == "CHARACTERSHEET" then
+		if PaperDollFrame and PaperDollFrame:IsVisible() then
+			if ItemRack.InvOpen and ItemRack.Indexes[ItemRack.InvOpen] then
+				local slotBtn = _G[ItemRack.Indexes[ItemRack.InvOpen].paperdoll_slot]
+				if slotBtn and MouseIsOver(slotBtn) then
+					over = 1
+				end
+			end
+		else
+			over = nil
+		end
 	end
 
 	if not over then

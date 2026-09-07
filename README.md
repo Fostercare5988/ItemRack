@@ -94,6 +94,12 @@ Detailed scripting API documentation, debounce configuration, and examples are a
 
 ## Changelog
 
+### Version 1.99.2 (Character Sheet Flyout Menus)
+- **PaperDoll Equipment Flyouts**: Hovering over any worn or available equipment slot in the Character Sheet (`PaperDollFrame`) displays an instant flyout menu containing all eligible items in inventory plus an empty slot for unequipped items.
+- **Side-by-Side Tooltip Layout**: Re-anchored item tooltips dynamically beside the flyout menu, preventing tooltip overlap and ensuring both worn item stats and flyout items remain fully visible.
+- **Empty Slot Unequip**: Added an explicit `(empty)` slot with an informative "Unequip" tooltip, allowing instant 1-click gear removal into the best available bag slot.
+- **Settings Toggle**: Added `CharSheetMenu` setting (toggleable in ItemRack settings) to easily enable or disable character sheet hover flyouts.
+
 ### Version 1.99.1 (Inventory Trio Synergy & Hook Modernization)
 - **Non-Destructive Hooking Pipeline**: Replaced legacy global function overwrites (`UseInventoryItem = ...`, `UseAction = ...`) with native ClassicAPI `hooksecurefunc` and safe fallback.
 - **Hardware-Accelerated Action Inspection**: Modernized `UseAction` monitoring to inspect `GetActionInfo(slot)` Item IDs directly, bypassing tooltip scanning.
