@@ -67,12 +67,13 @@ Originally created by Gello, with modern enhancements and maintenance by **[Fost
 
 ---
 
-## Banking Integration
+## Banking Integration & Bagnon Compatibility
 
-When interacting with a bank:
-- Items in your bank that belong to a set or slot menu are outlined with a distinct **blue border**.
-- Selecting a banked item from an item or set flyout menu automatically pulls it into your inventory (space permitting).
-- Selecting an unbanked item while at the bank deposits it into your bank bags.
+ItemRack operates with **zero coupling and 100% interoperability** alongside **[Bagnon](https://github.com/Fostercare5988/Bagnon)**:
+- **Universal Bank Detection**: ItemRack listens directly to engine-level `BANKFRAME_OPENED` and `BANKFRAME_CLOSED` events rather than inspecting Blizzard's default UI frames. When Bagnon's unified bank window (`Banknon`) opens, ItemRack activates its banking mode automatically with zero frame conflict.
+- **Visual Bank Borders**: Items in your bank that belong to a gear set or slot menu display a distinct **blue border** in ItemRack flyout menus.
+- **Bi-Directional Transfer**: Selecting a banked item or set from an ItemRack menu pulls it into your bags (space permitting); selecting an unbanked item or set while at the bank pushes it into your bank bags.
+- **Real-Time State Synchronization**: All equipment swaps and bank movements update Bagnon's unified bags and bank frames instantaneously via native `BAG_UPDATE` and `PLAYERBANKSLOTS_CHANGED` engine dispatches.
 
 ---
 

@@ -4,7 +4,7 @@
 ## Notes: Item sets and context menus for inventory items
 ## Version: 1.99
 ## SavedVariables: ItemRack_Users, ItemRack_Settings, ItemRack_Events, Rack_User
-## OptionalDeps: IsMounted, ButtonHole
+## OptionalDeps: Bagnon, IsMounted, ButtonHole
 Constants.lua
 Events.lua
 mountGUID.lua
