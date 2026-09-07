@@ -1222,11 +1222,16 @@ function ItemRack_OnLoad()
 	oldItemRack_PaperDollFrame_OnHide = PaperDollFrame_OnHide
 	PaperDollFrame_OnHide = newItemRack_PaperDollFrame_OnHide
 
-	oldItemRack_UseInventoryItem = UseInventoryItem
-	UseInventoryItem = newItemRack_UseInventoryItem
+	if hooksecurefunc then
+		hooksecurefunc("UseInventoryItem", ItemRack.OnUseInventoryItem)
+		hooksecurefunc("UseAction", ItemRack.OnUseAction)
+	else
+		oldItemRack_UseInventoryItem = UseInventoryItem
+		UseInventoryItem = newItemRack_UseInventoryItem
 
-	oldItemRack_UseAction = UseAction
-	UseAction = newItemRack_UseAction
+		oldItemRack_UseAction = UseAction
+		UseAction = newItemRack_UseAction
+	end
 	
 	oIR_GossipTitleButton_OnClick = GossipTitleButton_OnClick
 	GossipTitleButton_OnClick = IR_GossipTitleButton_OnClick
@@ -1462,35 +1467,49 @@ end
 
 --[[ Hooked functions ]]--
 
--- if action is currently equipped, then reflect its use to the mod
-function newItemRack_UseAction(slot,checkCursor,onSelf)
-
+-- Non-destructive handler for UseAction
+function ItemRack.OnUseAction(slot, checkCursor, onSelf)
 	if IsEquippedAction(slot) and cursor_empty() then
-		ItemRack_ItemTooltip:SetAction(slot)
-		local usedName = ItemRack_ItemTooltipTextLeft1:GetText()
-
-		local name,foundSlot
-
-		-- look for a worn item with same name as clicked item
-		for i=1,20 do
-			local link = GetInventoryItemLink("player",i)
-			if link then
-				name = GetItemInfo(link)
-				if name==usedName then
-					foundSlot = i -- found this item in slot i
-					break
+		local foundSlot
+		if GetActionInfo then
+			local actionType, actionID = GetActionInfo(slot)
+			if actionType == "item" and actionID then
+				for i = 0, 19 do
+					local link = GetInventoryItemLink("player", i)
+					if link and string.find(link, "item:" .. actionID .. ":", 1, true) then
+						foundSlot = i
+						break
+					end
 				end
 			end
 		end
 
-		if foundSlot and GetActionCooldown(slot)==0 then
-			ItemRack_ReactUseInventoryItem(foundSlot)
+		if not foundSlot then
+			ItemRack_ItemTooltip:SetAction(slot)
+			local usedName = ItemRack_ItemTooltipTextLeft1:GetText()
+			if usedName then
+				for i = 1, 20 do
+					local link = GetInventoryItemLink("player", i)
+					if link and GetItemInfo(link) == usedName then
+						foundSlot = i
+						break
+					end
+				end
+			end
 		end
 
+		if foundSlot and GetActionCooldown(slot) == 0 then
+			ItemRack_ReactUseInventoryItem(foundSlot)
+		end
 	end
+end
 
-	oldItemRack_UseAction(slot,checkCursor,onSelf)
-
+-- if action is currently equipped, then reflect its use to the mod (legacy fallback hook)
+function newItemRack_UseAction(slot,checkCursor,onSelf)
+	ItemRack.OnUseAction(slot,checkCursor,onSelf)
+	if oldItemRack_UseAction then
+		oldItemRack_UseAction(slot,checkCursor,onSelf)
+	end
 end
 
 -- Inv slots are added by ALT+clicking the paper doll
@@ -1749,12 +1768,21 @@ function ItemRack_ReactUseInventoryItem(slot)
 	end
 end
 
--- hook for UseInventoryItem
+-- Non-destructive handler for UseInventoryItem
+function ItemRack.OnUseInventoryItem(slot)
+	if slot and slot >= 0 and slot <= 19 then
+		ItemRack_ReactUseInventoryItem(slot)
+	end
+end
+
+-- hook for UseInventoryItem (legacy fallback hook)
 function newItemRack_UseInventoryItem(slot)
 	local cooldown = GetInventoryItemCooldown("player",slot)
-	oldItemRack_UseInventoryItem(slot) -- call original UseInventoryItem
+	if oldItemRack_UseInventoryItem then
+		oldItemRack_UseInventoryItem(slot)
+	end
 	if cooldown==0 then
-		ItemRack_ReactUseInventoryItem(slot) -- tell the mod an item was used
+		ItemRack_ReactUseInventoryItem(slot)
 	end
 end
 
@@ -4128,7 +4156,7 @@ end
 function Rack.FindSpace(bank)
 	local slot
 	if bank and ItemRack.BankIsOpen then -- search bank
-		for _,i in ItemRack.BankSlots do
+		for _,i in ipairs(ItemRack.BankSlots) do
 			slot = Rack.FindSpaceInBag(i)
 			if slot then
 				Rack.LockList[i][slot] = 1
@@ -4616,6 +4644,9 @@ end
 function Rack.ShutdownQueue()
 	RackFrame:UnregisterEvent("ITEM_LOCK_CHANGED")
 	Rack.SetSwapping = nil
+	if TrinketMenu and TrinketMenu.UpdateWornTrinkets then
+		TrinketMenu.UpdateWornTrinkets()
+	end
 	for i=1,#Rack.SwapQueueOrder do
 		Rack.RemoveQueueEntry(Rack.SwapQueueOrder[i])
 	end
@@ -4630,6 +4661,9 @@ function Rack.IterateSwapQueue()
 		-- if queue is empty, unregister and leave
 		Rack.SetSwapping = nil
 		RackFrame:UnregisterEvent("ITEM_LOCK_CHANGED")
+		if TrinketMenu and TrinketMenu.UpdateWornTrinkets then
+			TrinketMenu.UpdateWornTrinkets()
+		end
 		return
 	
 	elseif SpellIsTargeting() or CursorHasItem() then
@@ -4811,6 +4845,9 @@ function Rack.OnItemLockChanged()
 	if not Rack.SwapQueueOrder[1] then
 		Rack.SetSwapping = nil
 		RackFrame:UnregisterEvent("ITEM_LOCK_CHANGED")
+		if TrinketMenu and TrinketMenu.UpdateWornTrinkets then
+			TrinketMenu.UpdateWornTrinkets()
+		end
 		return
 	end
 
@@ -5129,8 +5166,55 @@ function Rack.SetHasBanked(setname)
 	end
 end
 
+-- Returns comma-separated list of sets containing the specified item (by link, ID, or name)
+function Rack.GetSetsWithItem(itemIdentifier)
+	if not user or not Rack_User or not Rack_User[user] or not Rack_User[user].Sets then return nil end
+	if not itemIdentifier then return nil end
+
+	local targetID, targetName
+	if type(itemIdentifier) == "number" then
+		targetID = tostring(itemIdentifier)
+	elseif type(itemIdentifier) == "string" then
+		local _, _, linkID = string.find(itemIdentifier, "item:(%d+)")
+		if linkID then
+			targetID = linkID
+		elseif string.find(itemIdentifier, "^%d+$") then
+			targetID = itemIdentifier
+		else
+			targetName = itemIdentifier
+		end
+	end
+
+	local matchingSets
+	for setName, setData in pairs(Rack_User[user].Sets) do
+		if not string.find(setName, "^ItemRack") and not string.find(setName, "^Rack-") then
+			for slot = 0, 19 do
+				local slotData = setData[slot]
+				if slotData and slotData.id and slotData.id ~= 0 then
+					local matched = false
+					if targetID then
+						local _, _, slotBaseID = string.find(tostring(slotData.id), "(%d+)")
+						if slotBaseID == targetID or tostring(slotData.id) == targetID then
+							matched = true
+						end
+					elseif targetName and slotData.name and slotData.name == targetName then
+						matched = true
+					end
+
+					if matched then
+						matchingSets = matchingSets and (matchingSets .. ", " .. setName) or setName
+						break
+					end
+				end
+			end
+		end
+	end
+	return matchingSets
+end
+ItemRack.GetSetsWithItem = Rack.GetSetsWithItem
+
 function Rack.FindBankedItem(name)
-	for _,i in ItemRack.BankSlots do
+	for _,i in ipairs(ItemRack.BankSlots) do
 		for j=1,GetContainerNumSlots(i) do
 			if strfind(GetContainerItemLink(i,j) or "",name,1,1) then
 				return i,j

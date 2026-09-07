@@ -67,13 +67,20 @@ Originally created by Gello, with modern enhancements and maintenance by **[Fost
 
 ---
 
-## Banking Integration & Bagnon Compatibility
+## Suite Synergy: The Inventory & Equipment Trio
 
-ItemRack operates with **zero coupling and 100% interoperability** alongside **[Bagnon](https://github.com/Fostercare5988/Bagnon)**:
-- **Universal Bank Detection**: ItemRack listens directly to engine-level `BANKFRAME_OPENED` and `BANKFRAME_CLOSED` events rather than inspecting Blizzard's default UI frames. When Bagnon's unified bank window (`Banknon`) opens, ItemRack activates its banking mode automatically with zero frame conflict.
-- **Visual Bank Borders**: Items in your bank that belong to a gear set or slot menu display a distinct **blue border** in ItemRack flyout menus.
-- **Bi-Directional Transfer**: Selecting a banked item or set from an ItemRack menu pulls it into your bags (space permitting); selecting an unbanked item or set while at the bank pushes it into your bank bags.
-- **Real-Time State Synchronization**: All equipment swaps and bank movements update Bagnon's unified bags and bank frames instantaneously via native `BAG_UPDATE` and `PLAYERBANKSLOTS_CHANGED` engine dispatches.
+ItemRack is engineered to operate in tight, high-performance synergy alongside **[Bagnon](https://github.com/Fostercare5988/Bagnon)** and **[TrinketMenu](https://github.com/Fostercare5988/TrinketMenu)**:
+
+- **Bagnon Bank & Bag Coordination**:
+  - **Universal Bank Detection**: ItemRack listens directly to engine-level `BANKFRAME_OPENED` and `BANKFRAME_CLOSED` events. When Bagnon's unified bank window (`Banknon`) opens, ItemRack activates its banking mode automatically with zero frame conflict.
+  - **Visual Bank Borders**: Items in your bank belonging to an ItemRack set or slot menu display a distinct **blue border** in ItemRack menus.
+  - **Tooltip Set Indicators**: ItemRack exports `Rack.GetSetsWithItem(link)`, allowing Bagnon to display which saved sets an item belongs to (`ItemRack: <Set Names>`) directly on bag and bank item tooltips.
+  - **Real-Time State Synchronization**: All equipment swaps and bank movements update Bagnon's unified bags and bank frames instantaneously via native `BAG_UPDATE` and `PLAYERBANKSLOTS_CHANGED` engine dispatches.
+- **TrinketMenu Cooperative Queueing**:
+  - **Shared Non-Destructive Hooking**: Both addons utilize ClassicAPI `hooksecurefunc("UseInventoryItem")` and `hooksecurefunc("UseAction")`, sharing the engine hook pipeline without overwriting global functions.
+  - **Zero Lock Contention**: TrinketMenu cooperatively pauses its combat queue while ItemRack is performing a multi-piece set swap (`Rack.SetSwapping`).
+  - **Instant Wear Notification**: When ItemRack completes a set swap, it immediately notifies TrinketMenu (`TrinketMenu.UpdateWornTrinkets()`), keeping worn icons and cooldown overlays synchronized with 0ms latency.
+  - **Trinket Slot Independence**: To let TrinketMenu autonomously manage active trinket rotations, users can Alt+Click slots 13 and 14 in ItemRack to ignore them in general gear sets.
 
 ---
 
@@ -86,6 +93,13 @@ Detailed scripting API documentation, debounce configuration, and examples are a
 ---
 
 ## Changelog
+
+### Version 1.99.1 (Inventory Trio Synergy & Hook Modernization)
+- **Non-Destructive Hooking Pipeline**: Replaced legacy global function overwrites (`UseInventoryItem = ...`, `UseAction = ...`) with native ClassicAPI `hooksecurefunc` and safe fallback.
+- **Hardware-Accelerated Action Inspection**: Modernized `UseAction` monitoring to inspect `GetActionInfo(slot)` Item IDs directly, bypassing tooltip scanning.
+- **Public Set Inspection API**: Added `Rack.GetSetsWithItem(itemIdentifier)` to query all active equipment sets containing an item (by link, ID, or name).
+- **TrinketMenu Synchronization**: Automatically triggers `TrinketMenu.UpdateWornTrinkets()` when set swaps finish, ensuring instantaneous visual synchronization.
+- **Safe Table Traversal**: Converted legacy bank slot iterators to standard Lua `ipairs(ItemRack.BankSlots)` loops.
 
 ### Version 1.99.0 (Modern Engine Stack)
 - **High-Cohesion Modular Architecture**: Eradicated the legacy `localization.lua` misnomer. Decoupled UI strings and keybindings into `Constants.lua` and automated set triggers into `Events.lua`.
