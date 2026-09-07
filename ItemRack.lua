@@ -2059,9 +2059,26 @@ function ItemRack_MenuFrame_OnHide()
 	end
 	ItemRack.InvOpen = nil
 	ItemRack.MenuDockedTo = nil
+	GameTooltip:Hide()
 end
 
 --[[ Tooltips ]]--
+
+local function set_tooltip_anchor(owner)
+
+	if ItemRack.MenuDockedTo=="CHARACTERSHEET" and ItemRack.InvOpen then
+		-- if this is a tooltip of an item docked to character sheet, anchor it to the paperdoll_slot
+		GameTooltip:SetOwner(owner,"ANCHOR_RIGHT")
+	elseif ItemRack_Settings.TooltipFollow=="ON" then
+		if (owner:GetLeft() or 0)<400 then
+			GameTooltip:SetOwner(owner,"ANCHOR_RIGHT")
+		else
+			GameTooltip:SetOwner(owner,"ANCHOR_LEFT")
+		end
+	else
+		GameTooltip_SetDefaultAnchor(GameTooltip,UIParent)
+	end
+end
 
 function ItemRack_Inv_Tooltip()
 
@@ -2122,22 +2139,6 @@ function ItemRack_ClearTooltip()
 	Rack.StopTimer("TooltipUpdate")
 	if not ItemRack.InvOpen then
 		ItemRack_MenuFrame_OnHide()
-	end
-end
-
-local function set_tooltip_anchor(owner)
-
-	if ItemRack.MenuDockedTo=="CHARACTERSHEET" and ItemRack.InvOpen then
-		-- if this is a tooltip of an item docked to character sheet, anchor it to the paperdoll_slot
-		GameTooltip:SetOwner(owner,"ANCHOR_RIGHT")
-	elseif ItemRack_Settings.TooltipFollow=="ON" then
-		if (owner:GetLeft() or 0)<400 then
-			GameTooltip:SetOwner(owner,"ANCHOR_RIGHT")
-		else
-			GameTooltip:SetOwner(owner,"ANCHOR_LEFT")
-		end
-	else
-		GameTooltip_SetDefaultAnchor(GameTooltip,UIParent)
 	end
 end
 
