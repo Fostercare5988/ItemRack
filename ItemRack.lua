@@ -42,6 +42,7 @@ ItemRack_Settings = {			-- These settings are for all users:
 	SetLabels = "ON",			-- whether labels show on set icons
 	AutoToggle = "OFF",			-- whether sets automatically toggle when chosen
 	CharSheetMenu = "ON",		-- whether to display swap flyout when hovering character sheet slots
+	QualityBorders = "ON",		-- whether items show rarity-colored borders
 }
 
 -- all event scripts are stored globally in this saved variable.  Defaults are in Events.lua
@@ -51,6 +52,49 @@ ItemRack_Version = 1.99
 
 --[[ Local Variables ]]--
 local _G = _G or getfenv(0)
+
+local QUALITY_BORDER_BACKDROP = {
+	edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+	tile = true,
+	tileSize = 8,
+	edgeSize = 16,
+	insets = { left = 0, right = 0, top = 0, bottom = 0 }
+}
+
+-- High-luminance, high-contrast palette for clear distinction (Green vs Blue vs Purple)
+local ENHANCED_QUALITY_COLORS = {
+	[2] = { r = 0.05, g = 1.00, b = 0.15 }, -- Vibrant Emerald Green
+	[3] = { r = 0.00, g = 0.70, b = 1.00 }, -- Radiant Electric Sky Blue
+	[4] = { r = 0.85, g = 0.20, b = 1.00 }, -- Vivid Neon Purple / Magenta
+	[5] = { r = 1.00, g = 0.55, b = 0.00 }, -- Flaming Orange
+	[6] = { r = 0.95, g = 0.85, b = 0.40 }, -- Radiant Gold
+}
+
+local function GetBorderQualityColor(quality)
+	local color = ENHANCED_QUALITY_COLORS[quality]
+	if color then
+		return color.r, color.g, color.b
+	end
+	return GetItemQualityColor(quality)
+end
+
+local function get_or_create_quality_border(btn)
+	if not btn then return nil end
+	if not btn.qualityBorder then
+		local name = btn:GetName()
+		local qBorder = CreateFrame("Frame", name and (name .. "QualityBorder") or nil, btn)
+		qBorder:SetPoint("TOPLEFT", btn, "TOPLEFT", -2, 2)
+		qBorder:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 2, -2)
+		qBorder:SetBackdrop(QUALITY_BORDER_BACKDROP)
+		qBorder:EnableMouse(false)
+		if btn.GetFrameLevel then
+			qBorder:SetFrameLevel(btn:GetFrameLevel() + 1)
+		end
+		qBorder:Hide()
+		btn.qualityBorder = qBorder
+	end
+	return btn.qualityBorder
+end
 local IRTurtle = nil
 if TURTLE_WOW_VERSION then
 	IRTurtle = true 
@@ -186,6 +230,7 @@ ItemRack.OptInfo = {
 	["ItemRack_Opt_SetLabels"] = { text=ItemRackText.OPT_SETLABELS_TEXT, tooltip=ItemRackText.OPT_SETLABELS_TOOLTIP, info="SetLabels" },
 	["ItemRack_Opt_AutoToggle"] = { text=ItemRackText.OPT_AUTOTOGGLE_TEXT, tooltip=ItemRackText.OPT_AUTOTOGGLE_TOOLTIP, info="AutoToggle" },
 	["ItemRack_Opt_CharSheetMenu"] = { text=ItemRackText.OPT_CHARSHEETMENU_TEXT, tooltip=ItemRackText.OPT_CHARSHEETMENU_TOOLTIP, type="Check", info="CharSheetMenu" },
+	["ItemRack_Opt_QualityBorders"] = { text=ItemRackText.OPT_QUALITYBORDERS_TEXT, tooltip=ItemRackText.OPT_QUALITYBORDERS_TOOLTIP, type="Check", info="QualityBorders" },
 }
 
 -- numerically indexed list of options for scrollable options window
@@ -205,6 +250,7 @@ ItemRack.OptScroll = {
 	{ idx="ItemRack_Opt_MenuShift" },
 	{ idx="ItemRack_Opt_AutoToggle" },
 	{ idx="ItemRack_Opt_CharSheetMenu" },
+	{ idx="ItemRack_Opt_QualityBorders" },
 	{ idx="ItemRack_Opt_ShowEmpty" },
 	{ idx="ItemRack_Opt_AllowHidden" },
 	{ idx="ItemRack_Opt_Soulbound" },
@@ -500,7 +546,7 @@ end
 -- the old central info gatherer, now a wrapper to Rack.GetItemInfo
 local function get_item_info(bag,slot)
 
-	local texture,itemID,name,equipslot,soulbound,count
+	local texture,itemID,name,equipslot,soulbound,count,quality
 
 	if bag==20 then
 		-- if querying set slot, return current set texture and name
@@ -514,7 +560,7 @@ local function get_item_info(bag,slot)
 		return texture,name
 	end
 
-	texture,itemID,name,equipslot = Rack.GetItemInfo(bag,slot)
+	texture,itemID,name,equipslot,quality = Rack.GetItemInfo(bag,slot)
 	if slot then
 		_,count = GetContainerItemInfo(bag,slot)
 	end
@@ -533,7 +579,7 @@ local function get_item_info(bag,slot)
 		end
 	end
 
-	return texture,itemID,name,equipslot,soulbound,count
+	return texture,itemID,name,equipslot,soulbound,count,quality
 end
 
 local function cursor_empty()
@@ -578,7 +624,7 @@ local function cooldowns_need_updating()
 	ItemRack.CooldownsNeedUpdating = true
 end
 
-local function populate_baggeditems(idx,bag,slot,name,texture,id)
+local function populate_baggeditems(idx,bag,slot,name,texture,id,quality)
 
 	if not ItemRack.BaggedItems[idx] then
 		ItemRack.BaggedItems[idx] = {}
@@ -588,6 +634,7 @@ local function populate_baggeditems(idx,bag,slot,name,texture,id)
 	ItemRack.BaggedItems[idx].name = name
 	ItemRack.BaggedItems[idx].texture = texture
 	ItemRack.BaggedItems[idx].id = id
+	ItemRack.BaggedItems[idx].quality = quality
 end
 
 -- to minimize garbage creation, tables are manipulated by copying values instead of tables
@@ -601,6 +648,7 @@ local function copy_baggeditems(source,dest)
 	ItemRack.BaggedItems[dest].name = ItemRack.BaggedItems[source].name
 	ItemRack.BaggedItems[dest].texture = ItemRack.BaggedItems[source].texture
 	ItemRack.BaggedItems[dest].id = ItemRack.BaggedItems[source].id
+	ItemRack.BaggedItems[dest].quality = ItemRack.BaggedItems[source].quality
 end
 
 -- sorts menu up to stop_point, which is idx+1 usually (sort uses stop_point as a temp spot for swapping)
@@ -640,7 +688,7 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 		prevSlot = invslot
 	end
 
-	local item,itemID,texture,name,equipslot,soulbound,found,count
+	local item,itemID,texture,name,equipslot,soulbound,found,count,quality
 
 	if invslot==0 and cacheInvalid then
 		-- if this is an ammo slot, clear totals
@@ -659,7 +707,7 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 			-- go through bags and gather items into .BaggedItems
 			for i=bagStart,bagEnd do
 				for j=1,GetContainerNumSlots(i) do
-					texture,itemID,name,equipslot,soulbound,count = get_item_info(i,j)
+					texture,itemID,name,equipslot,soulbound,count,quality = get_item_info(i,j)
 					soulbound = soulbound or ItemRack.Indexes[invslot].ignore_soulbound -- pretend item soulbound if flagged to ignore_soulbound
 					if (equipslot and ItemRack.Indexes[invslot][equipslot]) and (soulbound or ItemRack_Settings.Soulbound=="OFF") then
 						if ItemRack_Settings.AllowHidden=="ON" and ItemRack_Users[user].Ignore[name] and not IsAltKeyDown() then
@@ -675,11 +723,11 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 									end
 								end
 								if not found then
-									populate_baggeditems(idx,i,j,name,texture,itemID)
+									populate_baggeditems(idx,i,j,name,texture,itemID,quality)
 									idx = idx + 1
 								end
 							else
-								populate_baggeditems(idx,i,j,name,texture,itemID)
+								populate_baggeditems(idx,i,j,name,texture,itemID,quality)
 								idx = idx + 1
 							end
 						end
@@ -762,6 +810,7 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 			ItemRack_SetCooldownFont("ItemRackMenu"..i)
 			_G["ItemRackMenu"..i.."Border"]:SetVertexColor(.15,.25,1,1)
 			_G["ItemRackMenu"..i.."Border"]:Hide()
+			get_or_create_quality_border(item)
 			ItemRack.MaxItems = ItemRack.MaxItems + 1
 		end
 		local icon = _G["ItemRackMenu"..i.."Icon"]
@@ -830,6 +879,9 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 				_G["ItemRackMenu"..i.."Border"]:Hide()
 				_G["ItemRackMenu"..i.."Icon"]:SetVertexColor(1,1,1)
 			end
+			-- quality borders not shown on set-slot menus (items have no bag quality here)
+			local qBorder = _G["ItemRackMenu"..i] and _G["ItemRackMenu"..i].qualityBorder
+			if qBorder then qBorder:Hide() end
 				
 			item = _G["ItemRackMenu"..i.."Name"]
 			if ItemRack_Settings.SetLabels=="ON" then
@@ -840,14 +892,14 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 			end
 			item = _G["ItemRackMenu"..i.."HotKey"]
 			if Rack_User[user].Sets[name].key and ItemRack_Settings.Bindings=="ON" then
-				local _,_,j,k = string.find(Rack_User[user].Sets[name].key or "","(.).+(-.)")
+				local _,_,j,k = string.find(Rack_User[user].Sets[name].key or "","(.).+(-.)") 
 				item:SetText((j or "")..(k or ""))
 				item:Show()
 			else
 				item:Hide()
 			end
 		end
-	else -- normal slot (1-19) has no overlays
+	else -- normal slot (1-19)
 		for i=1,ItemRack.NumberOfItems do
 			_G["ItemRackMenu"..i.."Name"]:SetText("")
 			_G["ItemRackMenu"..i.."Count"]:SetText("")
@@ -859,6 +911,22 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 			else
 				_G["ItemRackMenu"..i.."Border"]:Hide()
 				_G["ItemRackMenu"..i.."Icon"]:SetVertexColor(1,1,1)
+			end
+
+			-- quality border
+			local menuBtn = _G["ItemRackMenu"..i]
+			if menuBtn then
+				local qBorder = get_or_create_quality_border(menuBtn)
+				if qBorder then
+					local itemQuality = ItemRack.BaggedItems[i].quality
+					if ItemRack_Settings.QualityBorders ~= "OFF" and itemQuality and itemQuality > 1 then
+						local r,g,b = GetBorderQualityColor(itemQuality)
+						qBorder:SetBackdropBorderColor(r,g,b,1.0)
+						qBorder:Show()
+					else
+						qBorder:Hide()
+					end
+				end
 			end
 		end
 	end
@@ -929,10 +997,27 @@ local function draw_inv()
 	ItemRack.TrinketsPaired = false -- changes to true if two trinkets are beside each other
 
 	if #bar>0 then
+		local function apply_inv_quality_border(invBtn, invSlotID)
+			if not invBtn then return end
+			local qBorder = get_or_create_quality_border(invBtn)
+			if not qBorder then return end
+			if ItemRack_Settings.QualityBorders ~= "OFF" and invSlotID ~= 20 then
+				local _,_,_,_,q = get_item_info(invSlotID)
+				if q and q > 1 then
+					local r,g,b = GetBorderQualityColor(q)
+					qBorder:SetBackdropBorderColor(r,g,b,1.0)
+					qBorder:Show()
+					return
+				end
+			end
+			qBorder:Hide()
+		end
+
 		item = _G["ItemRackInv"..bar[1]]
 		item:ClearAllPoints()
 		item:SetPoint(cornerStart,"ItemRack_InvFrame",cornerStart,xdirStart,ydirStart)
 		_G["ItemRackInv"..bar[1].."Icon"]:SetTexture(get_item_info(bar[1]))
+		apply_inv_quality_border(item, bar[1])
 		item:Show()
 		if ItemRack_Settings.RightClick=="ON" and (bar[1]==13 and bar[2]==14) then
 			ItemRack.TrinketsPaired = true
@@ -951,6 +1036,7 @@ local function draw_inv()
 			item:ClearAllPoints()
 			item:SetPoint(cornerTo,"ItemRackInv"..bar[i-1],corner,xdir+xspacer,ydir+yspacer)
 			_G["ItemRackInv"..bar[i].."Icon"]:SetTexture(get_item_info(bar[i]))
+			apply_inv_quality_border(item, bar[i])
 			item:Show()
 			cx = cx + math.abs(xadd) + math.abs(xspacer)
 			cy = cy + math.abs(yadd) + math.abs(yspacer) -- was minus yspacer
@@ -4090,32 +4176,38 @@ end
 
 --[[ Item information ]]
 
--- returns itemTexture, itemID, itemName, itemSlot of an item in container(bag,slot) or inventory("player",bag)
+-- returns itemTexture, itemID, itemName, itemSlot, itemQuality of an item in container(bag,slot) or inventory("player",bag)
 function Rack.GetItemInfo(bag,slot)
-	local id,itemLink,itemID,itemSlot,itemTexture,itemName
+	local id,itemLink,itemID,itemSlot,itemTexture,itemName,itemQuality
 
 	if slot then -- this is a container item
 		itemLink = GetContainerItemLink(bag,slot)
 	else
 		itemLink = GetInventoryItemLink("player",bag)
+		itemQuality = GetInventoryItemQuality("player",bag)
 	end
 
 	if itemLink then
 		_,_,id = string.find(itemLink,"(item:%d+:%d+:%d+:%d+)")
 		_,_,itemID = string.find(id or "","item:(%d+:%d+:%d+):%d+")
-		itemName,_,_,_,_,_,_,itemSlot,itemTexture = GetItemInfo(id)
+		local q
+		itemName,_,q,_,_,_,_,itemSlot,itemTexture = GetItemInfo(id or itemLink)
+		itemQuality = itemQuality or q
 	elseif not slot then -- if no link and this is an inventory slot, missing or ammo
 		_,itemTexture = GetInventorySlotInfo(Rack.SlotInfo[bag].name) -- get paperdoll texture
 		itemID = 0 -- assume empty slot
 		if bag==0 then -- this is an ammo slot
 			local ammoTexture = GetInventoryItemTexture("player",0)
 			if ammoTexture then
+				itemQuality = GetInventoryItemQuality("player",0)
 				ItemRack_ItemTooltip:SetInventoryItem("player",0)
 				itemName = ItemRack_ItemTooltipTextLeft1:GetText()
 				for i=0,4 do -- look through containers to get itemID of this ammo
 					for j=1,GetContainerNumSlots(i) do
 						if itemName==Rack.GetContainerItemName(i,j) then
-							_,itemID,_,itemSlot = Rack.GetItemInfo(i,j)
+							local q
+							_,itemID,_,itemSlot,q = Rack.GetItemInfo(i,j)
+							itemQuality = itemQuality or q
 							i,j = 99,99
 						end
 					end
@@ -4125,7 +4217,15 @@ function Rack.GetItemInfo(bag,slot)
 		end
 	end
 
-	return itemTexture, itemID, itemName, itemSlot
+	if not itemQuality and slot and C_Container and C_Container.GetContainerItemID then
+		local cid = C_Container.GetContainerItemID(bag, slot)
+		if cid then
+			local _, _, q = GetItemInfo(cid)
+			itemQuality = q
+		end
+	end
+
+	return itemTexture, itemID, itemName, itemSlot, itemQuality
 end
 
 -- returns the name of an item in bag,slot
