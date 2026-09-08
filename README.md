@@ -94,6 +94,17 @@ Detailed scripting API documentation, debounce configuration, and examples are a
 
 ## Changelog
 
+### Version 1.99.3 (Item Quality Borders)
+- **Native Quality Borders**: Items in flyout menus (`ItemRackMenu` buttons) and on the main bar (`ItemRackInv` buttons) now display crisp `UI-Tooltip-Border` rarity borders — the same vibrant palette used in Bagnon:
+  - Uncommon: Vibrant Emerald Green
+  - Rare: Radiant Electric Sky Blue
+  - Epic: Vivid Neon Purple
+  - Legendary: Flaming Orange
+- **No External Dependency**: Implemented entirely with native `SetBackdrop` (ClassicAPI / DXVK), no ShaguTweaks or external libs required.
+- **Lazy Frame Creation**: `qualityBorder` sub-frames are created on demand and reused, zero GC overhead per update.
+- **Settings Toggle**: Added `QualityBorders` setting (ON by default) to the ItemRack settings scroll list to show or hide borders without a reload.
+- **Rack.GetItemInfo Extension**: Now returns `itemQuality` as a 5th return value, with a dual-tier resolution fallback (`GetInventoryItemQuality` → `GetItemInfo` → `C_Container.GetContainerItemID`).
+
 ### Version 1.99.2 (Character Sheet Flyout Menus)
 - **PaperDoll Equipment Flyouts**: Hovering over any worn or available equipment slot in the Character Sheet (`PaperDollFrame`) displays an instant flyout menu containing all eligible items in inventory plus an empty slot for unequipped items.
 - **Side-by-Side Tooltip Layout**: Re-anchored item tooltips dynamically beside the flyout menu, preventing tooltip overlap and ensuring both worn item stats and flyout items remain fully visible.
