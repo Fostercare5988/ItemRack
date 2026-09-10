@@ -95,6 +95,35 @@ local function get_or_create_quality_border(btn)
 	end
 	return btn.qualityBorder
 end
+
+local function apply_inv_quality_border(invBtn, invSlotID)
+	if not invBtn then return end
+	local qBorder = get_or_create_quality_border(invBtn)
+	if not qBorder then return end
+
+	if ItemRack_Settings.QualityBorders ~= "OFF" and invSlotID and invSlotID ~= 20 then
+		local q = GetInventoryItemQuality("player", invSlotID)
+		if not q then
+			local link = GetInventoryItemLink("player", invSlotID)
+			if link then
+				local _, _, itemQ = GetItemInfo(link)
+				q = itemQ
+			end
+		end
+
+		if type(q) == "number" and q > 1 then
+			local r, g, b = GetBorderQualityColor(q)
+			qBorder:SetBackdropBorderColor(r, g, b, 1.0)
+			if invBtn.GetFrameLevel then
+				qBorder:SetFrameLevel(invBtn:GetFrameLevel() + 1)
+			end
+			qBorder:Show()
+			return
+		end
+	end
+
+	qBorder:Hide()
+end
 local IRTurtle = nil
 if TURTLE_WOW_VERSION then
 	IRTurtle = true 
@@ -868,6 +897,20 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 			if ItemRack.AmmoCounts[ItemRack.BaggedItems[i].name] then
 				_G["ItemRackMenu"..i.."Count"]:SetText(ItemRack.AmmoCounts[ItemRack.BaggedItems[i].name])
 			end
+			local menuBtn = _G["ItemRackMenu"..i]
+			if menuBtn then
+				local qBorder = get_or_create_quality_border(menuBtn)
+				if qBorder then
+					local itemQuality = ItemRack.BaggedItems[i].quality
+					if ItemRack_Settings.QualityBorders ~= "OFF" and type(itemQuality) == "number" and itemQuality > 1 then
+						local r,g,b = GetBorderQualityColor(itemQuality)
+						qBorder:SetBackdropBorderColor(r,g,b,1.0)
+						qBorder:Show()
+					else
+						qBorder:Hide()
+					end
+				end
+			end
 		end
 	elseif invslot==20 then -- if this is a set slot, show names and bindings
 		for i=1,ItemRack.NumberOfItems do
@@ -919,7 +962,7 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 				local qBorder = get_or_create_quality_border(menuBtn)
 				if qBorder then
 					local itemQuality = ItemRack.BaggedItems[i].quality
-					if ItemRack_Settings.QualityBorders ~= "OFF" and itemQuality and itemQuality > 1 then
+					if ItemRack_Settings.QualityBorders ~= "OFF" and type(itemQuality) == "number" and itemQuality > 1 then
 						local r,g,b = GetBorderQualityColor(itemQuality)
 						qBorder:SetBackdropBorderColor(r,g,b,1.0)
 						qBorder:Show()
@@ -997,22 +1040,6 @@ local function draw_inv()
 	ItemRack.TrinketsPaired = false -- changes to true if two trinkets are beside each other
 
 	if #bar>0 then
-		local function apply_inv_quality_border(invBtn, invSlotID)
-			if not invBtn then return end
-			local qBorder = get_or_create_quality_border(invBtn)
-			if not qBorder then return end
-			if ItemRack_Settings.QualityBorders ~= "OFF" and invSlotID ~= 20 then
-				local _,_,_,_,q = get_item_info(invSlotID)
-				if q and q > 1 then
-					local r,g,b = GetBorderQualityColor(q)
-					qBorder:SetBackdropBorderColor(r,g,b,1.0)
-					qBorder:Show()
-					return
-				end
-			end
-			qBorder:Hide()
-		end
-
 		item = _G["ItemRackInv"..bar[1]]
 		item:ClearAllPoints()
 		item:SetPoint(cornerStart,"ItemRack_InvFrame",cornerStart,xdirStart,ydirStart)
@@ -2525,6 +2552,9 @@ function ItemRack_Opt_OnClick(overrideID)
 			ItemRack_SetAllCooldownFonts()
 		elseif id=="ItemRack_Opt_SetLabels" then
 			draw_inv()
+		elseif id=="ItemRack_Opt_QualityBorders" then
+			draw_inv()
+			cacheInvalid = true
 		end
 	end
 end
@@ -2690,7 +2720,9 @@ function ItemRack_Sets_UpdateInventory()
 		if not texture then
 			_,texture = GetInventorySlotInfo(string.gsub(ItemRack.Indexes[i].paperdoll_slot,"Character",""))
 		end
+		local btn = _G["ItemRack_Sets_Inv"..i]
 		_G["ItemRack_Sets_Inv"..i.."Icon"]:SetTexture(texture)
+		apply_inv_quality_border(btn, i)
 		ItemRack.SetIcons[i+1] = texture
 		highlight_set_item(i)
 	end
