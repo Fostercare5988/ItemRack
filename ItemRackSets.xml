@@ -446,13 +446,13 @@
 						</Offset>
 					</Anchor>
 				</Anchors>
-				<NormalTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons">
+				<NormalTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons" setAllPoints="true">
 					<TexCoords left=".5" right=".75" top=".25" bottom=".5"/>
 				</NormalTexture>
-				<PushedTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons">
+				<PushedTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons" setAllPoints="true">
 					<TexCoords left=".75" right="1" top=".25" bottom=".5"/>
 				</PushedTexture>
-				<HighlightTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons" alphaMode="ADD">
+				<HighlightTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons" alphaMode="ADD" setAllPoints="true">
 					<TexCoords left=".25" right=".5" top=".5" bottom=".75"/>
 				</HighlightTexture>
 				<Scripts>
@@ -476,10 +476,10 @@
 						</Offset>
 					</Anchor>
 				</Anchors>
-				<NormalTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons">
+				<NormalTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons" setAllPoints="true">
 					<TexCoords left=".5" right=".75" top="0" bottom=".25"/>
 				</NormalTexture>
-				<PushedTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons">
+				<PushedTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons" setAllPoints="true">
 					<TexCoords left=".75" right="1" top="0" bottom=".25"/>
 				</PushedTexture>
 			</Button>
@@ -1853,13 +1853,13 @@
 										</Offset>
 									</Anchor>
 								</Anchors>
-								<NormalTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons">
+								<NormalTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons" setAllPoints="true">
 									<TexCoords left=".5" right=".75" top=".25" bottom=".5"/>
 								</NormalTexture>
-								<PushedTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons">
+								<PushedTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons" setAllPoints="true">
 									<TexCoords left=".75" right="1" top=".25" bottom=".5"/>
 								</PushedTexture>
-								<HighlightTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons" alphaMode="ADD">
+								<HighlightTexture file="Interface\AddOns\ItemRack\ItemRack-Buttons" alphaMode="ADD" setAllPoints="true">
 									<TexCoords left=".25" right=".5" top=".5" bottom=".75"/>
 								</HighlightTexture>
 								<Scripts>

@@ -124,6 +124,209 @@ local function apply_inv_quality_border(invBtn, invSlotID)
 
 	qBorder:Hide()
 end
+
+local function get_or_create_enchant_overlay(btn)
+	if not btn then return nil end
+	if not btn.enchantOverlay then
+		local name = btn:GetName()
+		local overlay = CreateFrame("Frame", name and (name .. "EnchantOverlay") or nil, btn)
+		overlay:SetAllPoints(btn)
+		overlay:EnableMouse(false)
+		if btn.GetFrameLevel then
+			overlay:SetFrameLevel(btn:GetFrameLevel() + 3)
+		end
+
+		local iconFrame = CreateFrame("Frame", nil, overlay)
+		iconFrame:SetWidth(14)
+		iconFrame:SetHeight(14)
+		iconFrame:SetPoint("TOPRIGHT", overlay, "TOPRIGHT", -1, -1)
+
+		local iconBg = iconFrame:CreateTexture(nil, "BACKGROUND")
+		iconBg:SetPoint("TOPLEFT", iconFrame, "TOPLEFT", 0, 0)
+		iconBg:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT", 0, 0)
+		iconBg:SetTexture(0, 0, 0, 0.85)
+
+		local icon = iconFrame:CreateTexture(nil, "ARTWORK")
+		icon:SetPoint("TOPLEFT", iconFrame, "TOPLEFT", 1, -1)
+		icon:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT", -1, 1)
+		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		overlay.icon = icon
+		overlay.iconFrame = iconFrame
+
+		local duration = overlay:CreateFontString(nil, "OVERLAY")
+		duration:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+		duration:SetPoint("TOPRIGHT", iconFrame, "BOTTOMRIGHT", 0, -1)
+		duration:SetShadowOffset(1, -1)
+		duration:SetShadowColor(0, 0, 0, 1)
+		duration:SetTextColor(1.0, 1.0, 1.0)
+		overlay.duration = duration
+
+		local warn = overlay:CreateTexture(nil, "OVERLAY")
+		warn:SetWidth(7)
+		warn:SetHeight(7)
+		warn:SetPoint("TOPRIGHT", overlay, "TOPRIGHT", -2, -2)
+		warn:SetTexture(1.0, 0.6, 0.0, 0.9)
+		warn:Hide()
+		overlay.warn = warn
+
+		overlay:Hide()
+		btn.enchantOverlay = overlay
+	end
+	return btn.enchantOverlay
+end
+
+local function get_temp_enchant_texture(enchantID, itemName)
+	if enchantID and type(C_Item) == "table" and type(C_Item.GetEnchantInfo) == "function" then
+		local ok, info = pcall(C_Item.GetEnchantInfo, enchantID)
+		if ok and type(info) == "table" and info.spellID and type(C_Spell) == "table" and type(C_Spell.GetSpellTexture) == "function" then
+			local tex = C_Spell.GetSpellTexture(info.spellID)
+			if tex then return tex end
+		end
+	end
+	local lower = itemName and string.lower(itemName) or ""
+	if string.find(lower, "oil") then
+		return "Interface\\Icons\\INV_Potion_19"
+	elseif string.find(lower, "stone") or string.find(lower, "weight") then
+		return "Interface\\Icons\\INV_Stone_SharpeningStone_04"
+	end
+	return "Interface\\Icons\\Ability_Poisons"
+end
+
+local function get_equipped_weapon_enchant(slotID)
+	local hasEnchant, expirationMs, charges, enchantID
+	if type(C_Item) == "table" and type(C_Item.GetItemTempEnchantInfo) == "function" then
+		local ok, h, exp, ch, id = pcall(C_Item.GetItemTempEnchantInfo, { equipmentSlotIndex = slotID })
+		if ok and h then
+			hasEnchant, expirationMs, charges, enchantID = h, exp, ch, id
+		end
+	end
+	if not hasEnchant and type(GetWeaponEnchantInfo) == "function" then
+		local hasMain, mainExp, mainCharges, hasOff, offExp, offCharges = GetWeaponEnchantInfo()
+		if slotID == 16 and hasMain then
+			hasEnchant, expirationMs, charges = true, mainExp, mainCharges
+		elseif slotID == 17 and hasOff then
+			hasEnchant, expirationMs, charges = true, offExp, offCharges
+		end
+	end
+	return hasEnchant, expirationMs, charges, enchantID
+end
+
+local function get_bagged_weapon_enchant(bagID, slotIndex)
+	if not bagID or not slotIndex then return nil end
+	if type(C_Item) == "table" and type(C_Item.GetItemTempEnchantInfo) == "function" then
+		local ok, h, exp, ch, id = pcall(C_Item.GetItemTempEnchantInfo, { bagID = bagID, slotIndex = slotIndex })
+		if ok and h then
+			return h, exp, ch, id
+		end
+	end
+	return nil
+end
+
+local function format_enchant_duration(expirationMs, charges)
+	local s = (expirationMs and expirationMs > 0) and math.floor(expirationMs / 1000) or 0
+	local timeStr = ""
+	if s >= 3600 then
+		timeStr = string.format("%dh", math.floor(s / 3600))
+	elseif s >= 60 then
+		timeStr = string.format("%dm", math.floor(s / 60))
+	elseif s > 0 then
+		timeStr = string.format("%ds", s)
+	end
+
+	local text = timeStr
+	local r, g, b = 1.0, 1.0, 1.0
+	if charges and charges > 0 and charges <= 5 then
+		text = charges .. "c"
+		r, g, b = 1.0, 0.4, 0.1
+	elseif charges and charges > 0 and charges <= 10 then
+		text = (timeStr ~= "") and (timeStr .. "·" .. charges) or (charges .. "c")
+		r, g, b = 1.0, 0.7, 0.2
+	elseif s > 0 and s < 120 then
+		r, g, b = 1.0, 0.2, 0.2
+	end
+
+	return text, r, g, b
+end
+
+local function update_equipped_enchant(slotID, btn)
+	if not btn then return end
+	local overlay = btn.enchantOverlay or get_or_create_enchant_overlay(btn)
+	if not overlay then return end
+
+	if slotID ~= 16 and slotID ~= 17 then
+		overlay:Hide()
+		return
+	end
+
+	local itemLink = GetInventoryItemLink("player", slotID)
+	if not itemLink then
+		overlay:Hide()
+		return
+	end
+
+	local itemName, _, _, _, _, _, _, itemEquipLoc = GetItemInfo(itemLink)
+	local isWeapon = (itemEquipLoc == "INVTYPE_WEAPON" or itemEquipLoc == "INVTYPE_2HWEAPON" or
+		itemEquipLoc == "INVTYPE_WEAPONMAINHAND" or itemEquipLoc == "INVTYPE_WEAPONOFFHAND")
+
+	if not isWeapon then
+		overlay:Hide()
+		return
+	end
+
+	local hasEnchant, expirationMs, charges, enchantID = get_equipped_weapon_enchant(slotID)
+	if hasEnchant then
+		overlay.warn:Hide()
+		local tex = get_temp_enchant_texture(enchantID, itemName)
+		overlay.icon:SetTexture(tex)
+		overlay.iconFrame:Show()
+
+		local text, r, g, b = format_enchant_duration(expirationMs, charges)
+		overlay.duration:SetText(text)
+		overlay.duration:SetTextColor(r, g, b)
+		overlay.duration:Show()
+		overlay:Show()
+	else
+		overlay.iconFrame:Hide()
+		overlay.duration:Hide()
+
+		local _, playerClass = UnitClass("player")
+		if playerClass == "ROGUE" or playerClass == "SHAMAN" then
+			overlay.warn:Show()
+			overlay:Show()
+		else
+			overlay.warn:Hide()
+			overlay:Hide()
+		end
+	end
+end
+
+local function update_menu_weapon_enchant(btn, baggedItem)
+	if not btn then return end
+	local overlay = btn.enchantOverlay or get_or_create_enchant_overlay(btn)
+	if not overlay then return end
+
+	if not baggedItem or not baggedItem.bag or not baggedItem.slot then
+		overlay:Hide()
+		return
+	end
+
+	local hasEnchant, expirationMs, charges, enchantID = get_bagged_weapon_enchant(baggedItem.bag, baggedItem.slot)
+	if hasEnchant then
+		overlay.warn:Hide()
+		local tex = get_temp_enchant_texture(enchantID, baggedItem.name)
+		overlay.icon:SetTexture(tex)
+		overlay.iconFrame:Show()
+
+		local text, r, g, b = format_enchant_duration(expirationMs, charges)
+		overlay.duration:SetText(text)
+		overlay.duration:SetTextColor(r, g, b)
+		overlay.duration:Show()
+		overlay:Show()
+	else
+		overlay:Hide()
+	end
+end
+
 local IRTurtle = nil
 if TURTLE_WOW_VERSION then
 	IRTurtle = true 
@@ -875,8 +1078,12 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 		end
 	end
 	for i=(ItemRack.NumberOfItems+1),ItemRack.MaxItems do
-		if _G["ItemRackMenu"..i] then
-			_G["ItemRackMenu"..i]:Hide()
+		local mBtn = _G["ItemRackMenu"..i]
+		if mBtn then
+			mBtn:Hide()
+			if mBtn.enchantOverlay then
+				mBtn.enchantOverlay:Hide()
+			end
 		end
 	end
 	if col==0 then
@@ -910,6 +1117,9 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 						qBorder:Hide()
 					end
 				end
+				if menuBtn.enchantOverlay then
+					menuBtn.enchantOverlay:Hide()
+				end
 			end
 		end
 	elseif invslot==20 then -- if this is a set slot, show names and bindings
@@ -925,6 +1135,9 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 			-- quality borders not shown on set-slot menus (items have no bag quality here)
 			local qBorder = _G["ItemRackMenu"..i] and _G["ItemRackMenu"..i].qualityBorder
 			if qBorder then qBorder:Hide() end
+			if _G["ItemRackMenu"..i] and _G["ItemRackMenu"..i].enchantOverlay then
+				_G["ItemRackMenu"..i].enchantOverlay:Hide()
+			end
 				
 			item = _G["ItemRackMenu"..i.."Name"]
 			if ItemRack_Settings.SetLabels=="ON" then
@@ -956,7 +1169,7 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 				_G["ItemRackMenu"..i.."Icon"]:SetVertexColor(1,1,1)
 			end
 
-			-- quality border
+			-- quality border & weapon enchant overlay
 			local menuBtn = _G["ItemRackMenu"..i]
 			if menuBtn then
 				local qBorder = get_or_create_quality_border(menuBtn)
@@ -969,6 +1182,11 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 					else
 						qBorder:Hide()
 					end
+				end
+				if invslot == 16 or invslot == 17 then
+					update_menu_weapon_enchant(menuBtn, ItemRack.BaggedItems[i])
+				elseif menuBtn.enchantOverlay then
+					menuBtn.enchantOverlay:Hide()
 				end
 			end
 		end
@@ -1035,7 +1253,13 @@ local function draw_inv()
 	end
 
 	for i=0,20 do
-		_G["ItemRackInv"..i]:Hide()
+		local slotBtn = _G["ItemRackInv"..i]
+		if slotBtn then
+			slotBtn:Hide()
+			if slotBtn.enchantOverlay then
+				slotBtn.enchantOverlay:Hide()
+			end
+		end
 	end
 	ItemRack.TrinketsPaired = false -- changes to true if two trinkets are beside each other
 
@@ -1045,6 +1269,7 @@ local function draw_inv()
 		item:SetPoint(cornerStart,"ItemRack_InvFrame",cornerStart,xdirStart,ydirStart)
 		_G["ItemRackInv"..bar[1].."Icon"]:SetTexture(get_item_info(bar[1]))
 		apply_inv_quality_border(item, bar[1])
+		update_equipped_enchant(bar[1], item)
 		item:Show()
 		if ItemRack_Settings.RightClick=="ON" and (bar[1]==13 and bar[2]==14) then
 			ItemRack.TrinketsPaired = true
@@ -1064,6 +1289,7 @@ local function draw_inv()
 			item:SetPoint(cornerTo,"ItemRackInv"..bar[i-1],corner,xdir+xspacer,ydir+yspacer)
 			_G["ItemRackInv"..bar[i].."Icon"]:SetTexture(get_item_info(bar[i]))
 			apply_inv_quality_border(item, bar[i])
+			update_equipped_enchant(bar[i], item)
 			item:Show()
 			cx = cx + math.abs(xadd) + math.abs(xspacer)
 			cy = cy + math.abs(yadd) + math.abs(yspacer) -- was minus yspacer
@@ -2387,6 +2613,25 @@ function ItemRack_CooldownUpdate_OnUpdate()
 			end
 		end
 
+	end
+
+	-- update weapon enchant indicators on equipped buttons
+	if ItemRack_InvFrame:IsVisible() then
+		if _G["ItemRackInv16"] and _G["ItemRackInv16"]:IsVisible() then
+			update_equipped_enchant(16, _G["ItemRackInv16"])
+		end
+		if _G["ItemRackInv17"] and _G["ItemRackInv17"]:IsVisible() then
+			update_equipped_enchant(17, _G["ItemRackInv17"])
+		end
+	end
+
+	-- update weapon enchant indicators on open weapon swap menu
+	if ItemRack_MenuFrame:IsVisible() and ItemRack.InvOpen and (ItemRack.InvOpen == 16 or ItemRack.InvOpen == 17) then
+		for i=1,ItemRack.NumberOfItems do
+			if ItemRack.BaggedItems[i] and ItemRack.BaggedItems[i].bag then
+				update_menu_weapon_enchant(_G["ItemRackMenu"..i], ItemRack.BaggedItems[i])
+			end
+		end
 	end
 
 	if ItemRack_Settings.Notify=="ON" then
