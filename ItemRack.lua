@@ -161,14 +161,6 @@ local function get_or_create_enchant_overlay(btn)
 		duration:SetTextColor(1.0, 1.0, 1.0)
 		overlay.duration = duration
 
-		local warn = overlay:CreateTexture(nil, "OVERLAY")
-		warn:SetWidth(7)
-		warn:SetHeight(7)
-		warn:SetPoint("TOPRIGHT", overlay, "TOPRIGHT", -2, -2)
-		warn:SetTexture(1.0, 0.6, 0.0, 0.9)
-		warn:Hide()
-		overlay.warn = warn
-
 		overlay:Hide()
 		btn.enchantOverlay = overlay
 	end
@@ -338,7 +330,6 @@ local function update_equipped_enchant(slotID, btn)
 
 	local hasEnchant, expirationMs, charges, enchantID = get_equipped_weapon_enchant(slotID)
 	if hasEnchant then
-		overlay.warn:Hide()
 		local enchantName = get_equipped_enchant_name(slotID)
 		local tex = get_enchant_texture_by_name(enchantName, enchantID)
 		overlay.icon:SetTexture(tex)
@@ -352,15 +343,7 @@ local function update_equipped_enchant(slotID, btn)
 	else
 		overlay.iconFrame:Hide()
 		overlay.duration:Hide()
-
-		local _, playerClass = UnitClass("player")
-		if playerClass == "ROGUE" or playerClass == "SHAMAN" then
-			overlay.warn:Show()
-			overlay:Show()
-		else
-			overlay.warn:Hide()
-			overlay:Hide()
-		end
+		overlay:Hide()
 	end
 end
 
@@ -400,7 +383,6 @@ local function update_menu_weapon_enchant(btn, baggedItem)
 					overlay.duration:SetText(badgeText)
 					overlay.duration:SetTextColor(r, g, b)
 					overlay.duration:Show()
-					overlay.warn:Hide()
 					overlay:Show()
 					return
 				end
