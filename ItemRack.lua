@@ -4458,6 +4458,11 @@ function Rack.GetItemInfo(bag,slot)
 	local id,itemLink,itemID,itemSlot,itemTexture,itemName,itemQuality
 
 	if slot then -- this is a container item
+		if type(C_Container) == "table" and type(C_Container.GetContainerItemID) == "function" then
+			if not C_Container.GetContainerItemID(bag, slot) then
+				return nil
+			end
+		end
 		itemLink = GetContainerItemLink(bag,slot)
 	else
 		itemLink = GetInventoryItemLink("player",bag)
@@ -4507,6 +4512,13 @@ end
 
 -- returns the name of an item in bag,slot
 function Rack.GetContainerItemName(bag,slot)
+	if type(C_Container) == "table" and type(C_Container.GetContainerItemID) == "function" then
+		local cid = C_Container.GetContainerItemID(bag, slot)
+		if cid and cid > 0 then
+			local name = GetItemInfo(cid)
+			if name then return name end
+		end
+	end
 	local _,_,name = string.find(GetContainerItemLink(bag,slot) or "","%[(.+)%]")
 	return name
 end
@@ -4540,30 +4552,35 @@ end
 
 -- returns true if the bagid (0-4) is a normal "Container", as opposed to quivers and ammo pouches
 function Rack.ValidBag(bagid)
-
-	local linkid,bagtype,legal
-
 	if bagid==0 or bagid==-1 then
-		legal = true
-	else
-		local invID = ContainerIDToInventoryID(bagid)
-		_,_,linkid = string.find(GetInventoryItemLink("player",invID) or "","item:(%d+)")
-		if linkid then
-			_,_,_,_,_,bagtype = GetItemInfo(linkid)
-			if bagtype==ItemRackText.INVTYPE_CONTAINER then -- "Bag" for enUS clients, "Container" for other clients
-				legal = true -- this is a true container
-			end
+		return true
+	end
+
+	local invID = ContainerIDToInventoryID(bagid)
+	local link = GetInventoryItemLink("player",invID)
+	if link then
+		local _,_,_,_,_,bagtype = GetItemInfo(link)
+		if bagtype==ItemRackText.INVTYPE_CONTAINER then
+			return true
 		end
 	end
 
-	return legal
+	return false
 end
 
 function Rack.FindSpaceInBag(bag)
 	if Rack.ValidBag(bag) then
 		for j=1,GetContainerNumSlots(bag) do
-			if not Rack.LockList[bag][j] and not GetContainerItemLink(bag,j) then
-				return j
+			if not Rack.LockList[bag][j] then
+				local hasItem
+				if type(C_Container) == "table" and type(C_Container.GetContainerItemID) == "function" then
+					hasItem = C_Container.GetContainerItemID(bag, j)
+				else
+					hasItem = GetContainerItemLink(bag, j)
+				end
+				if not hasItem then
+					return j
+				end
 			end
 		end
 	end
