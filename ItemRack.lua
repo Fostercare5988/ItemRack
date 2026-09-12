@@ -175,7 +175,54 @@ local function get_or_create_enchant_overlay(btn)
 	return btn.enchantOverlay
 end
 
-local function get_temp_enchant_texture(enchantID, itemName)
+local function get_enchant_texture_by_name(enchantName, enchantID)
+	if enchantName then
+		local lower = string.lower(enchantName)
+		-- Dissolvent Poison: purple icon for custom 60m poison
+		if string.find(lower, "dissolvent") then
+			return "Interface\\Icons\\Spell_Nature_SlowPoison"
+		-- Instant Poison: green icon
+		elseif string.find(lower, "instant") then
+			return "Interface\\Icons\\Ability_Poisons"
+		-- Deadly Poison: dual wield skull icon
+		elseif string.find(lower, "deadly") then
+			return "Interface\\Icons\\Ability_Rogue_DualWeild"
+		-- Crippling Poison: yellow vial
+		elseif string.find(lower, "crippling") then
+			return "Interface\\Icons\\INV_Potion_19"
+		-- Mind-numbing Poison: blue skull
+		elseif string.find(lower, "mind") then
+			return "Interface\\Icons\\Spell_Nature_NullifyDisease"
+		-- Corrosive Poison: corrosive poison vial
+		elseif string.find(lower, "corrosive") then
+			return "Interface\\Icons\\INV_Corrosive_01"
+		-- Wound Poison
+		elseif string.find(lower, "wound") then
+			return "Interface\\Icons\\INV_Misc_Herb_16"
+		-- Oils
+		elseif string.find(lower, "shadow oil") then
+			return "Interface\\Icons\\Spell_Shadow_BloodBoil"
+		elseif string.find(lower, "frost oil") then
+			return "Interface\\Icons\\Spell_Ice_Lament"
+		elseif string.find(lower, "mana oil") or string.find(lower, "wizard oil") or string.find(lower, "oil") then
+			return "Interface\\Icons\\INV_Potion_19"
+		-- Stones
+		elseif string.find(lower, "weight") then
+			return "Interface\\Icons\\INV_Stone_WeightStone_04"
+		elseif string.find(lower, "stone") then
+			return "Interface\\Icons\\INV_Stone_SharpeningStone_04"
+		-- Shaman Weapon Imbues
+		elseif string.find(lower, "windfury") then
+			return "Interface\\Icons\\Spell_Nature_Cyclone"
+		elseif string.find(lower, "flametongue") then
+			return "Interface\\Icons\\Spell_Fire_FlameTongue"
+		elseif string.find(lower, "frostbrand") then
+			return "Interface\\Icons\\Spell_Frost_FrostBrand"
+		elseif string.find(lower, "rockbiter") then
+			return "Interface\\Icons\\Spell_Nature_RockBiter"
+		end
+	end
+
 	if enchantID and type(C_Item) == "table" and type(C_Item.GetEnchantInfo) == "function" then
 		local ok, info = pcall(C_Item.GetEnchantInfo, enchantID)
 		if ok and type(info) == "table" and info.spellID and type(C_Spell) == "table" and type(C_Spell.GetSpellTexture) == "function" then
@@ -183,47 +230,55 @@ local function get_temp_enchant_texture(enchantID, itemName)
 			if tex then return tex end
 		end
 	end
-	local lower = itemName and string.lower(itemName) or ""
-	if string.find(lower, "oil") then
-		return "Interface\\Icons\\INV_Potion_19"
-	elseif string.find(lower, "stone") or string.find(lower, "weight") then
-		return "Interface\\Icons\\INV_Stone_SharpeningStone_04"
-	end
+
 	return "Interface\\Icons\\Ability_Poisons"
 end
 
-local function get_equipped_weapon_enchant(slotID)
-	local hasEnchant, expirationMs, charges, enchantID
-	if type(C_Item) == "table" and type(C_Item.GetItemTempEnchantInfo) == "function" then
-		local ok, h, exp, ch, id = pcall(C_Item.GetItemTempEnchantInfo, { equipmentSlotIndex = slotID })
-		if ok and h then
-			hasEnchant, expirationMs, charges, enchantID = h, exp, ch, id
-		end
-	end
-	if not hasEnchant and type(GetWeaponEnchantInfo) == "function" then
-		local hasMain, mainExp, mainCharges, hasOff, offExp, offCharges = GetWeaponEnchantInfo()
-		if slotID == 16 and hasMain then
-			hasEnchant, expirationMs, charges = true, mainExp, mainCharges
-		elseif slotID == 17 and hasOff then
-			hasEnchant, expirationMs, charges = true, offExp, offCharges
-		end
-	end
-	return hasEnchant, expirationMs, charges, enchantID
-end
-
-local function get_bagged_weapon_enchant(bagID, slotIndex)
-	if not bagID or not slotIndex then return nil end
-	if type(C_Item) == "table" and type(C_Item.GetItemTempEnchantInfo) == "function" then
-		local ok, h, exp, ch, id = pcall(C_Item.GetItemTempEnchantInfo, { bagID = bagID, slotIndex = slotIndex })
-		if ok and h then
-			return h, exp, ch, id
+local function get_equipped_enchant_name(slotID)
+	if not ItemRack_ItemTooltip then return nil end
+	ItemRack_ItemTooltip:ClearLines()
+	ItemRack_ItemTooltip:SetInventoryItem("player", slotID)
+	local n = ItemRack_ItemTooltip:NumLines()
+	for i = 2, n do
+		local line = getglobal("ItemRack_ItemTooltipTextLeft" .. i)
+		if line then
+			local text = line:GetText()
+			if text then
+				local _, _, name = string.find(text, "^(.-)%s*%(%s*%d+%s*%a+%s*%)")
+				if name and name ~= "" then
+					return name
+				end
+			end
 		end
 	end
 	return nil
 end
 
+local function get_equipped_weapon_enchant(slotID)
+	local hasEnchant, expirationMs, charges, enchantID
+	if type(GetWeaponEnchantInfo) == "function" then
+		local v1, v2, v3, v4, v5, v6, v7, v8 = GetWeaponEnchantInfo()
+		if type(v4) == "number" and (type(v5) == "boolean" or v5 == nil) then
+			-- ClassicAPI 12-value format (hasMain, exp, charges, id, hasOff, exp, charges, id, ...)
+			if slotID == 16 and v1 then
+				hasEnchant, expirationMs, charges, enchantID = true, v2, v3, v4
+			elseif slotID == 17 and v5 then
+				hasEnchant, expirationMs, charges, enchantID = true, v6, v7, v8
+			end
+		else
+			-- Vanilla 6-value format (hasMain, exp, charges, hasOff, exp, charges)
+			if slotID == 16 and v1 then
+				hasEnchant, expirationMs, charges = true, v2, v3
+			elseif slotID == 17 and v4 then
+				hasEnchant, expirationMs, charges = true, v5, v6
+			end
+		end
+	end
+	return hasEnchant, expirationMs, charges, enchantID
+end
+
 local function format_enchant_duration(expirationMs, charges)
-	local s = (expirationMs and expirationMs > 0) and math.floor(expirationMs / 1000) or 0
+	local s = (type(expirationMs) == "number" and expirationMs > 0) and math.floor(expirationMs / 1000) or 0
 	local timeStr = ""
 	if s >= 3600 then
 		timeStr = string.format("%dh", math.floor(s / 3600))
@@ -235,16 +290,33 @@ local function format_enchant_duration(expirationMs, charges)
 
 	local text = timeStr
 	local r, g, b = 1.0, 1.0, 1.0
-	if charges and charges > 0 and charges <= 5 then
+	if charges and type(charges) == "number" and charges > 0 and charges <= 5 then
 		text = charges .. "c"
 		r, g, b = 1.0, 0.4, 0.1
-	elseif charges and charges > 0 and charges <= 10 then
+	elseif charges and type(charges) == "number" and charges > 0 and charges <= 10 then
 		text = (timeStr ~= "") and (timeStr .. "·" .. charges) or (charges .. "c")
 		r, g, b = 1.0, 0.7, 0.2
 	elseif s > 0 and s < 120 then
 		r, g, b = 1.0, 0.2, 0.2
 	end
 
+	return text, r, g, b
+end
+
+local function format_bag_enchant_duration(timeStr, durVal, unitChar, charges)
+	local text = timeStr or ""
+	local r, g, b = 1.0, 1.0, 1.0
+	if charges and charges > 0 and charges <= 5 then
+		text = charges .. "c"
+		r, g, b = 1.0, 0.4, 0.1
+	elseif charges and charges > 0 and charges <= 10 then
+		text = (text ~= "") and (text .. "·" .. charges) or (charges .. "c")
+		r, g, b = 1.0, 0.7, 0.2
+	elseif unitChar == "m" and durVal and durVal < 2 then
+		r, g, b = 1.0, 0.2, 0.2
+	elseif unitChar == "s" then
+		r, g, b = 1.0, 0.2, 0.2
+	end
 	return text, r, g, b
 end
 
@@ -258,17 +330,8 @@ local function update_equipped_enchant(slotID, btn)
 		return
 	end
 
-	local itemLink = GetInventoryItemLink("player", slotID)
-	if not itemLink then
-		overlay:Hide()
-		return
-	end
-
-	local itemName, _, _, _, _, _, _, itemEquipLoc = GetItemInfo(itemLink)
-	local isWeapon = (itemEquipLoc == "INVTYPE_WEAPON" or itemEquipLoc == "INVTYPE_2HWEAPON" or
-		itemEquipLoc == "INVTYPE_WEAPONMAINHAND" or itemEquipLoc == "INVTYPE_WEAPONOFFHAND")
-
-	if not isWeapon then
+	local hasItem = GetInventoryItemTexture("player", slotID)
+	if not hasItem then
 		overlay:Hide()
 		return
 	end
@@ -276,7 +339,8 @@ local function update_equipped_enchant(slotID, btn)
 	local hasEnchant, expirationMs, charges, enchantID = get_equipped_weapon_enchant(slotID)
 	if hasEnchant then
 		overlay.warn:Hide()
-		local tex = get_temp_enchant_texture(enchantID, itemName)
+		local enchantName = get_equipped_enchant_name(slotID)
+		local tex = get_enchant_texture_by_name(enchantName, enchantID)
 		overlay.icon:SetTexture(tex)
 		overlay.iconFrame:Show()
 
@@ -310,21 +374,41 @@ local function update_menu_weapon_enchant(btn, baggedItem)
 		return
 	end
 
-	local hasEnchant, expirationMs, charges, enchantID = get_bagged_weapon_enchant(baggedItem.bag, baggedItem.slot)
-	if hasEnchant then
-		overlay.warn:Hide()
-		local tex = get_temp_enchant_texture(enchantID, baggedItem.name)
-		overlay.icon:SetTexture(tex)
-		overlay.iconFrame:Show()
-
-		local text, r, g, b = format_enchant_duration(expirationMs, charges)
-		overlay.duration:SetText(text)
-		overlay.duration:SetTextColor(r, g, b)
-		overlay.duration:Show()
-		overlay:Show()
-	else
+	if not ItemRack_ItemTooltip then
 		overlay:Hide()
+		return
 	end
+
+	ItemRack_ItemTooltip:ClearLines()
+	ItemRack_ItemTooltip:SetBagItem(baggedItem.bag, baggedItem.slot)
+	local n = ItemRack_ItemTooltip:NumLines()
+	for i = 2, n do
+		local line = getglobal("ItemRack_ItemTooltipTextLeft" .. i)
+		if line then
+			local text = line:GetText()
+			if text then
+				local _, _, name, durVal, durUnit = string.find(text, "^(.-)%s*%(%s*(%d+)%s*(%a+)%s*%)")
+				if name and name ~= "" then
+					local _, _, charges = string.find(text, "%(%s*(%d+)%s*charges?%s*%)")
+					local tex = get_enchant_texture_by_name(name)
+					overlay.icon:SetTexture(tex)
+					overlay.iconFrame:Show()
+
+					local unitChar = string.lower(string.sub(durUnit or "m", 1, 1))
+					local timeStr = (durVal or "") .. unitChar
+					local badgeText, r, g, b = format_bag_enchant_duration(timeStr, tonumber(durVal), unitChar, tonumber(charges))
+					overlay.duration:SetText(badgeText)
+					overlay.duration:SetTextColor(r, g, b)
+					overlay.duration:Show()
+					overlay.warn:Hide()
+					overlay:Show()
+					return
+				end
+			end
+		end
+	end
+
+	overlay:Hide()
 end
 
 local IRTurtle = nil
@@ -1576,6 +1660,10 @@ function ItemRack_OnLoad()
 	oldItemRack_PaperDollFrame_OnHide = PaperDollFrame_OnHide
 	PaperDollFrame_OnHide = newItemRack_PaperDollFrame_OnHide
 
+	-- hook for character sheet showing (to refresh weapon enchant overlays)
+	oldItemRack_PaperDollFrame_OnShow = PaperDollFrame_OnShow
+	PaperDollFrame_OnShow = newItemRack_PaperDollFrame_OnShow
+
 	if hooksecurefunc then
 		hooksecurefunc("UseInventoryItem", ItemRack.OnUseInventoryItem)
 		hooksecurefunc("UseAction", ItemRack.OnUseAction)
@@ -1929,6 +2017,18 @@ function newItemRack_PaperDollItemSlotButton_OnEnter()
 				end
 			end
 		end
+	end
+end
+
+function newItemRack_PaperDollFrame_OnShow()
+	if oldItemRack_PaperDollFrame_OnShow then
+		oldItemRack_PaperDollFrame_OnShow()
+	end
+	if _G["CharacterMainHandSlot"] then
+		update_equipped_enchant(16, _G["CharacterMainHandSlot"])
+	end
+	if _G["CharacterSecondaryHandSlot"] then
+		update_equipped_enchant(17, _G["CharacterSecondaryHandSlot"])
 	end
 end
 
@@ -2622,6 +2722,16 @@ function ItemRack_CooldownUpdate_OnUpdate()
 		end
 		if _G["ItemRackInv17"] and _G["ItemRackInv17"]:IsVisible() then
 			update_equipped_enchant(17, _G["ItemRackInv17"])
+		end
+	end
+
+	-- update weapon enchant indicators on paperdoll frame if open
+	if PaperDollFrame and PaperDollFrame:IsVisible() then
+		if _G["CharacterMainHandSlot"] and _G["CharacterMainHandSlot"]:IsVisible() then
+			update_equipped_enchant(16, _G["CharacterMainHandSlot"])
+		end
+		if _G["CharacterSecondaryHandSlot"] and _G["CharacterSecondaryHandSlot"]:IsVisible() then
+			update_equipped_enchant(17, _G["CharacterSecondaryHandSlot"])
 		end
 	end
 
