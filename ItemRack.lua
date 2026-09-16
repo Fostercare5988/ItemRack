@@ -1,10 +1,10 @@
--- Strict Engine Dependency Guard (Mandatory ClassicAPI v1.14.0+ & SuperWoW v2.2+)
-local MIN_CLASSIC_API = 11400
+-- Strict Engine Dependency Guard (Mandatory ClassicAPI v1.15.8+ & SuperWoW v2.2+)
+local MIN_CLASSIC_API = 11508
 
 if not (CLASSIC_API_VERSION and SUPERWOW_VERSION) or 
    (type(CLASSIC_API_VERSION) == "number" and CLASSIC_API_VERSION < MIN_CLASSIC_API) then
 	if DEFAULT_CHAT_FRAME then
-		DEFAULT_CHAT_FRAME:AddMessage("|cffff2020[Fatal Error]|r ItemRack requires ClassicAPI (v1.14.0+) & SuperWoW (v2.2+)! Please ensure both DLLs are loaded.", 1, 0.2, 0.2)
+		DEFAULT_CHAT_FRAME:AddMessage("|cffff2020[Fatal Error]|r ItemRack requires ClassicAPI (v1.15.8+) & SuperWoW (v2.2+)! Please ensure both DLLs are loaded.", 1, 0.2, 0.2)
 	end
 	return
 end
@@ -48,7 +48,7 @@ ItemRack_Settings = {			-- These settings are for all users:
 -- all event scripts are stored globally in this saved variable.  Defaults are in Events.lua
 ItemRack_Events = {}
 
-ItemRack_Version = 1.99
+ItemRack_Version = "2.0.0"
 
 --[[ Local Variables ]]--
 local _G = _G or getfenv(0)
@@ -978,12 +978,25 @@ end
 -- builds a menu outward from invslot (0-19)
 -- setframe = true if this is to dock to the set frame
 local cacheInvalid = true
-local prevSlot
+local menuCache = {}
 local idx = 1
 function ItemRack_BuildMenu(invslot,relativeTo)
-	if prevSlot ~= invslot then
+	local altDown = IsAltKeyDown() and true or false
+	if menuCache.slot ~= invslot or menuCache.origin ~= relativeTo
+		or menuCache.altDown ~= altDown or menuCache.bankOpen ~= ItemRack.BankIsOpen
+		or menuCache.soulbound ~= ItemRack_Settings.Soulbound
+		or menuCache.allowHidden ~= ItemRack_Settings.AllowHidden
+		or menuCache.showEmpty ~= ItemRack_Settings.ShowEmpty
+		or menuCache.rightClick ~= ItemRack_Settings.RightClick then
 		cacheInvalid = true
-		prevSlot = invslot
+		menuCache.slot = invslot
+		menuCache.origin = relativeTo
+		menuCache.altDown = altDown
+		menuCache.bankOpen = ItemRack.BankIsOpen
+		menuCache.soulbound = ItemRack_Settings.Soulbound
+		menuCache.allowHidden = ItemRack_Settings.AllowHidden
+		menuCache.showEmpty = ItemRack_Settings.ShowEmpty
+		menuCache.rightClick = ItemRack_Settings.RightClick
 	end
 
 	local item,itemID,texture,name,equipslot,soulbound,found,count,quality
@@ -1227,7 +1240,8 @@ function ItemRack_BuildMenu(invslot,relativeTo)
 			_G["ItemRackMenu"..i.."Count"]:SetText("")
 			_G["ItemRackMenu"..i.."HotKey"]:SetText("")
 
-			if ItemRack.BankedItems[ItemRack.BaggedItems[i].id] then
+			local itemBag = ItemRack.BaggedItems[i].bag
+			if itemBag and (itemBag == -1 or (itemBag >= 5 and itemBag <= 10)) then
 				_G["ItemRackMenu"..i.."Border"]:Show()
 				_G["ItemRackMenu"..i.."Icon"]:SetVertexColor(.5,.5,.5)
 			else
@@ -2311,11 +2325,15 @@ local function unequip_2h_weapon()
 		local b,s = Rack.FindSpace()
 		if not b then
 			UIErrorsFrame:AddMessage(ERR_INV_FULL,1,.1,.1,1,UIERRORS_HOLD_TIME)
+			return false
 		else
 			PickupInventoryItem(16)
 			PickupContainerItem(b,s)
+			if CursorHasItem() then ClearCursor() end
+			return not GetInventoryItemLink("player",16) and not CursorHasItem()
 		end
 	end
+	return true
 end
 
 function ItemRack_Menu_OnClick(arg1)
@@ -2330,9 +2348,17 @@ function ItemRack_Menu_OnClick(arg1)
 	if ItemRack.BankIsOpen then
 		if ItemRack.InvOpen~=20 then
 			if not itemID then return end
+			local sourceBag,sourceSlot = ItemRack.BaggedItems[id].bag,ItemRack.BaggedItems[id].slot
+			if not sourceBag or not sourceSlot then return end
+			local _,currentID = Rack.GetItemInfo(sourceBag,sourceSlot)
+			if currentID ~= itemID then
+				cacheInvalid = true
+				ItemRack_BuildMenu(ItemRack.InvOpen,ItemRack.MenuDockedTo)
+				return
+			end
 			Rack.ClearLockList()
 			local bag,slot
-			if ItemRack.BankedItems[itemID] then
+			if sourceBag == -1 or (sourceBag >= 5 and sourceBag <= 10) then
 				-- swap from bank to bag
 				bag,slot = Rack.FindSpace()
 				if bag then
@@ -2385,6 +2411,7 @@ function ItemRack_Menu_OnClick(arg1)
 		else
 			ItemRack_Users[user].Ignore[ItemRack.BaggedItems[id].name] = 1
 		end
+		cacheInvalid = true
 		ItemRack_BuildMenu(ItemRack.InvOpen,ItemRack.MenuDockedTo)
 
 	elseif arg1=="LeftButton" and IsShiftKeyDown() and ChatFrameEditBox:IsVisible() and ItemRack.InvOpen < 20 then
@@ -2428,15 +2455,27 @@ function ItemRack_Menu_OnClick(arg1)
 					local bag,slot = Rack.FindSpace()
 					if not bag then
 						UIErrorsFrame:AddMessage(ERR_INV_FULL,1,.1,.1,1,UIERRORS_HOLD_TIME)
+						ItemRack.Swapping = nil
+						return
 					else
 						PickupInventoryItem(17)
 						PickupContainerItem(bag,slot)
+						if CursorHasItem() then ClearCursor() end
+						if GetInventoryItemLink("player",17) or CursorHasItem() then
+							ItemRack.Swapping = nil
+							Rack.ClearLockList()
+							return
+						end
 					end
 				end
 			end
 			if ItemRack.InvOpen == 17 and not GetInventoryItemLink("player", 17) and GetInventoryItemLink("player", 16) then
 				-- unequip two-hand weapon if it's there
-				unequip_2h_weapon()
+				if not unequip_2h_weapon() then
+					ItemRack.Swapping = nil
+					Rack.ClearLockList()
+					return
+				end
 			end
 			PickupContainerItem(ItemRack.BaggedItems[id].bag, ItemRack.BaggedItems[id].slot)
 			PickupInventoryItem(ItemRack.InvOpen)
@@ -2875,6 +2914,9 @@ function ItemRack_Opt_OnClick(overrideID)
 			ItemRack_Sets_SavedScrollFrameScrollBar:SetValue(0)
 			ItemRack_Sets_SavedScrollFrame_Update()
 		elseif id=="ItemRack_Opt_EnableEvents" then
+			if ItemRack_Settings.EnableEvents=="OFF" then
+				ItemRack_DisableAllEvents()
+			end
 			sets_message((ItemRack_Settings.EnableEvents=="ON") and "Events enabled" or "Events disabled")
 		elseif id=="ItemRack_Opt_DisableToggle" then
 			draw_minimap_icon()
@@ -2892,6 +2934,12 @@ function ItemRack_Opt_OnClick(overrideID)
 		elseif id=="ItemRack_Opt_QualityBorders" then
 			draw_inv()
 			cacheInvalid = true
+		end
+		if info=="Soulbound" or info=="AllowHidden" or info=="ShowEmpty" or info=="RightClick" then
+			cacheInvalid = true
+			if ItemRack.InvOpen and ItemRack_MenuFrame:IsVisible() then
+				ItemRack_BuildMenu(ItemRack.InvOpen,ItemRack.MenuDockedTo)
+			end
 		end
 	end
 end
@@ -3300,6 +3348,7 @@ function ItemRack_Sets_Saved_OnClick(arg1)
 	elseif ItemRack.SelectedTab==4 then
 		-- chose a set from the Events tab (SubFrame4)
 		setname = ItemRack.SetsList[idx].Name
+		ItemRack.CancelEvent(eventList[ItemRack.SelectedEvent].name)
 		if not ItemRack_Users[user].Events[eventList[ItemRack.SelectedEvent].name] then
 			ItemRack_Users[user].Events[eventList[ItemRack.SelectedEvent].name] = { setname=setname, enabled=1 }
 		else
@@ -3549,6 +3598,7 @@ function ItemRack_Sets_Remove_OnClick()
 		-- if an event has this set, remove the association
 		for i in ItemRack_Users[user].Events do
 			if ItemRack_Users[user].Events[i].setname==ItemRack.SelectedName then
+				ItemRack_DisableEvent(i)
 				ItemRack_Users[user].Events[i] = nil
 			end
 		end
@@ -3844,6 +3894,8 @@ function ItemRack_Build_eventList()
 
 	scratchTableSize[1] = 1 -- size of each table for secondary sort
 	scratchTableSize[2] = 1
+	table.wipe(scratchTable[1])
+	table.wipe(scratchTable[2])
 
 	-- problems with secondary sort, so doing one manually - first split events into two tables: ones with a setname, ones without
 	for i in ItemRack_Events do
@@ -3861,9 +3913,6 @@ function ItemRack_Build_eventList()
 			end
 		end
 	end
-	scratchTable[1][scratchTableSize[1]] = nil
-	scratchTable[2][scratchTableSize[2]] = nil
-
 	-- sort each half
 	table.sort(scratchTable[1],function(e1,e2) return e1 and e2 and e1<e2 end)
 	table.sort(scratchTable[2],function(e1,e2) return e1 and e2 and e1<e2 end)
@@ -3975,6 +4024,7 @@ function ItemRack_EventsList_EnableOnClick()
 
 	if idx<eventListSize then
 		local eventname = eventList[idx].name
+		ItemRack.CancelEvent(eventname)
 		if not ItemRack_Users[user].Events[eventname] then
 			ItemRack_Users[user].Events[eventname] = {}
 		end
@@ -4087,6 +4137,7 @@ function ItemRack_EventButtons(v1)
 	elseif v1=="Save" then
 		local name = ItemRack_EventName:GetText()
 		if name and string.len(name)>0 then
+			ItemRack.CancelEvent(name)
 			if not ItemRack_Events[name] then
 				ItemRack_Events[name] = {}
 			end
@@ -4099,7 +4150,7 @@ function ItemRack_EventButtons(v1)
 			sets_message("Event not saved.  Need a name at least.")
 		end
 	elseif v1=="Test" then
-		RunScript(ItemRack_EventScript:GetText() or "")
+		ItemRack.RunEventScript(ItemRack_EventScript:GetText(),ItemRack_EventName:GetText(),nil,arg1,arg2)
 	end
 	ItemRack_Build_eventList()
 end
@@ -4107,6 +4158,17 @@ end
 --[[ Event Registration ]]--
 
 ItemRack.Register = {} -- game events (UNIT_AURA, etc) are stored here
+
+-- Cancel both the deadline and its retained payload.
+function ItemRack.CancelEvent(eventname)
+	ItemRack.EventQueue[eventname] = nil
+	ItemRack.EventQueueArg1[eventname] = nil
+	ItemRack.EventQueueArg2[eventname] = nil
+	ItemRack.EventQueueSetName[eventname] = nil
+	if not next(ItemRack.EventQueue) then
+		ItemRack_RegisterFrame:Hide()
+	end
+end
 
 -- debug function, to list registered game events and the mod events they are for
 function ItemRack_ListEvents()
@@ -4146,6 +4208,7 @@ end
 -- disables a sepcific eventname ("Riding","Warrior:Berserk",etc)
 function ItemRack_DisableEvent(eventname)
 
+	ItemRack.CancelEvent(eventname)
 	if not ItemRack_Events[eventname] then return end
 
 	local trigger = ItemRack_Events[eventname].trigger
@@ -4165,6 +4228,12 @@ end
 
 -- use this to initialize, enable or refresh Register
 function ItemRack_EnableAllEvents()
+
+	if ItemRack_Settings.EnableEvents~="ON" or ItemRack_SetsFrame:IsShown() then
+		ItemRack_DisableAllEvents()
+		return
+	end
+	ItemRack.EventsSuspended = nil
 
 	if ItemRack_Settings.Notify=="OFF" then
 		-- if notify is off, see if any ITEMRACK_NOTIFY events are registered and turn on notify
@@ -4193,9 +4262,14 @@ end
 
 -- use this to trun off all event watching.
 function ItemRack_DisableAllEvents()
-	for i in ItemRack_Users[user].Events do
-		ItemRack_DisableEvent(i)
-	end
+	ItemRack.EventsSuspended = true
+	ItemRack_RegisterFrame:UnregisterAllEvents()
+	table.wipe(ItemRack.Register)
+	table.wipe(ItemRack.EventQueue)
+	table.wipe(ItemRack.EventQueueArg1)
+	table.wipe(ItemRack.EventQueueArg2)
+	table.wipe(ItemRack.EventQueueSetName)
+	ItemRack_RegisterFrame:Hide()
 	ItemRackFrame:UnregisterEvent("PLAYER_AURAS_CHANGED")
 end
 
@@ -4208,19 +4282,39 @@ ItemRack.EventQueue = {} -- indexed by events ("Riding", "Warrior:Battle") of Ge
 -- storing just the first two values and moving on drops processing to 0.28 seconds
 ItemRack.EventQueueArg1 = {} -- indexed by events also, values of arg1
 ItemRack.EventQueueArg2 = {} -- indexed by events also, values of arg2
+ItemRack.EventQueueSetName = {} -- association that was active when queued
+
+-- User scripts keep their global environment; only dispatch context is restored.
+function ItemRack.RunEventScript(script,eventname,setname,a1,a2)
+	local func,err = loadstring(script or "", "ItemRack event: "..tostring(eventname))
+	if func then
+		local oldSet,oldName = ItemRack.EventSetName,ItemRack.EventEventName
+		local oldThis,oldEvent,oldArg1,oldArg2 = this,event,arg1,arg2
+		ItemRack.EventSetName,ItemRack.EventEventName = setname,eventname
+		arg1,arg2 = a1,a2
+		local ok
+		ok,err = pcall(func)
+		this,event,arg1,arg2 = oldThis,oldEvent,oldArg1,oldArg2
+		ItemRack.EventSetName,ItemRack.EventEventName = oldSet,oldName
+		if ok then return end
+	end
+	DEFAULT_CHAT_FRAME:AddMessage("ItemRack event \""..tostring(eventname).."\": "..tostring(err),1,0.2,0.2)
+end
+
+local function event_is_enabled(eventname)
+	local definition = ItemRack_Events[eventname]
+	local association = ItemRack_Users[user].Events[eventname]
+	return ItemRack_Settings.EnableEvents=="ON" and not ItemRack.EventsSuspended
+		and definition and association and association.enabled and association.setname
+		and Rack_User[user].Sets[association.setname]
+		and ItemRack.Register[definition.trigger] and ItemRack.Register[definition.trigger][eventname]
+end
 
 -- runs the eventname script, event = "Riding", "Warrior:Battle", etc
-local function run_event_script(eventname)
-
-	if eventname and ItemRack_Users[user].Events[eventname] then
-		ItemRack.EventSetName = ItemRack_Users[user].Events[eventname].setname
-		ItemRack.EventEventName = eventname
-		if ItemRack.EventSetName then
-			RunScript(ItemRack_Events[eventname].script)
-			ItemRack.EventSetName = nil
-			ItemRack.EventEventName = nil
-		end
-	end
+local function run_event_script(eventname,a1,a2)
+	if not event_is_enabled(eventname) then return end
+	ItemRack.RunEventScript(ItemRack_Events[eventname].script,eventname,
+		ItemRack_Users[user].Events[eventname].setname,a1,a2)
 end
 
 -- events("triggers") defined in game go through here
@@ -4238,13 +4332,14 @@ function ItemRack_RegisterFrame_OnEvent(arg1_param, arg2_param, arg3_param)
 
 	if ItemRack.Register[ev] then
 		for i in ItemRack.Register[ev] do
-			if ItemRack_Events[i].delay==0 then
+			if event_is_enabled(i) and ItemRack_Events[i].delay==0 then
 				-- EventSetName is the name of the set to use for EquipSet(), it's the set associated with the event
-				run_event_script(i)
-			else
+				run_event_script(i,a1,a2)
+			elseif event_is_enabled(i) then
 				ItemRack.EventQueue[i] = GetTime()+ItemRack_Events[i].delay
 				ItemRack.EventQueueArg1[i] = a1
 				ItemRack.EventQueueArg2[i] = a2
+				ItemRack.EventQueueSetName[i] = ItemRack_Users[user].Events[i].setname
 				ItemRack_RegisterFrame:Show() -- turn on OnUpdate
 			end
 		end
@@ -4258,20 +4353,17 @@ function ItemRack_RegisterFrame_OnUpdate()
 	if register_timer > .25 then
 		register_timer = 0
 		local current_time = GetTime()
-		local queue_exists = nil
 		for i in ItemRack.EventQueue do
-			queue_exists = 1 -- something is in the queue
 			if ItemRack.EventQueue[i]<current_time then
-				local holdarg1,holdarg2 = arg1,arg2
-				arg1 = ItemRack.EventQueueArg1[i]
-				arg2 = ItemRack.EventQueueArg2[i]
-				run_event_script(i)
-				arg1 = holdarg1
-				arg2 = holdarg2
-				ItemRack.EventQueue[i] = nil
+				local a1,a2,setname = ItemRack.EventQueueArg1[i],ItemRack.EventQueueArg2[i],ItemRack.EventQueueSetName[i]
+				-- Remove before running: a script may queue itself again.
+				ItemRack.CancelEvent(i)
+				if event_is_enabled(i) and ItemRack_Users[user].Events[i].setname==setname then
+					run_event_script(i,a1,a2)
+				end
 			end
 		end
-		if not queue_exists then
+		if not next(ItemRack.EventQueue) then
 			ItemRack_RegisterFrame:Hide() -- shut down OnUpdates when nothing left to process
 		end
 	end
@@ -4334,48 +4426,9 @@ end
 --Event script helper functions
 --These are not necessary.  They can be completely encapsulated in the scripts themselves.  They're here for convenience.
 
---this is a special function to use for mount events. returns true if player is mounted, nil otherwise
---pass a non-nil value for v1 to do a slow/thorough scan
+-- Mount state comes directly from the enhanced client.
 function ItemRack_PlayerMounted(v1)
-  if IsMounted then
-    return IsMounted() and true or false
-  end
-  if UnitIsMounted then
-    return UnitIsMounted("player") and true or false
-  end
-
-  if C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot then
-    local slots = C_UnitAuras.GetAuraSlots("player", "HELPFUL")
-    if slots then
-      for s = 1, #slots do
-        local aura = C_UnitAuras.GetAuraDataBySlot("player", slots[s])
-        if aura then
-          if aura.spellId and ItemRack.mountGUIDs and ItemRack.mountGUIDs[aura.spellId] then
-            return true
-          end
-          if aura.icon and string.find(aura.icon, "Mount_") then
-            return true
-          end
-        end
-      end
-    end
-  end
-
-  local i, buff, buffGUID
-  for i = 1, 32 do
-    buff, _, buffGUID = UnitBuff("player", i)
-    if not buff then
-      break
-    end
-
-    if buffGUID and ItemRack.mountGUIDs and ItemRack.mountGUIDs[buffGUID] then
-      return true
-    elseif string.find(buff, "Mount_") then
-      return true
-    end
-  end
-
-  return nil
+	return IsMounted() and true or false
 end
 
 -- returns the name of the form the player is in
@@ -4393,30 +4446,15 @@ function ItemRack_GetForm()
 end
 
 -- gathers active buffs into ItemRack.Buffs and sends it via RegisterFrame for events
+local buffSlots = {}
 function ItemRack_BuffsChanged()
 	table.wipe(ItemRack.Buffs)
-	if C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot then
-		local slots = C_UnitAuras.GetAuraSlots("player", "HELPFUL")
-		if slots then
-			for s = 1, #slots do
-				local aura = C_UnitAuras.GetAuraDataBySlot("player", slots[s])
-				if aura then
-					if aura.name then
-						ItemRack.Buffs[aura.name] = 1
-					end
-					if aura.icon then
-						ItemRack.Buffs[aura.icon] = 1
-					end
-				end
-			end
-		end
-	else
-		for i=1,24 do
-			local buffTexture, _, buffGUID = UnitBuff("player",i)
-			if not buffTexture then
-				break
-			end
-			ItemRack.Buffs[buffTexture] = 1
+	local _,count = C_UnitAuras.GetAuraSlots("player", "HELPFUL", nil, nil, buffSlots)
+	for s = 1, count do
+		local aura = C_UnitAuras.GetAuraDataBySlot("player", buffSlots[s])
+		if aura then
+			if aura.name then ItemRack.Buffs[aura.name] = 1 end
+			if aura.icon then ItemRack.Buffs[aura.icon] = 1 end
 		end
 	end
 	local oldarg1 = arg1
@@ -4440,13 +4478,11 @@ function ItemRack_GetUserSets()
 	return Rack_User[user].Sets, setname, texture
 end
 
---[[ Rack 2.0 code begins here ]]--
-
---[[ There is some redundancy because everything that follows is a part of ItemRack 2.0.
-	 Everything above this section will be scrapped for 2.0 ]]
+--[[ Bundled Rack equipment engine begins here.
+	ItemRack's UI and automation share this file with the Rack equipment engine. ]]
 
 Rack = {
-	version = 1.9,
+	version = "2.0.0",
 	debug = nil,
 
 	TimerPool = {}, -- timer tables added here ["InvUpdate"]={timer,limit,func,rep}
@@ -4454,7 +4490,8 @@ Rack = {
 	SetSwapping = nil, -- name of a set currently being swapped
 	SwapList = {}, -- individual item swap details go here
 	LockList = {}, -- tables of bags where slots are locked (to be skipped in FindItem and FindSpace)
-	CombatQueue = {} -- table of items to swap in when dropping out of combat/death
+	CombatQueue = {}, -- table of items to swap in when dropping out of combat/death
+	CombatQueueOwner = {} -- request owning each deferred slot (nil for manual queue entries)
 }
 
 Rack.SlotInfo = {
@@ -4523,22 +4560,22 @@ function Rack.OnEvent(arg1_param, arg2_param, arg3_param)
 	if ev=="ITEM_LOCK_CHANGED" then
 		Rack.OnItemLockChanged()
 	elseif (ev=="PLAYER_REGEN_ENABLED" or ev=="PLAYER_UNGHOST" or ev=="PLAYER_ALIVE") and (not Rack.IsPlayerReallyDead() and not UnitAffectingCombat("player")) then
-		-- player is coming out of combat or being res'ed.  EquipSet the CombatQueue
+		-- Finish the active transaction before consuming deferred work.
+		if Rack.SwapRequest then return end
 		local somethingQueued
+		local items = {}
 		for i=0,19 do
 			if Rack.CombatQueue[i] then
-				Rack_User[user].Sets["Rack-CombatQueue"][i].id=Rack.CombatQueue[i]
+				items[i] = { id=Rack.CombatQueue[i] }
 				Rack.CombatQueue[i] = nil
+				Rack.CombatQueueOwner[i] = nil
 				somethingQueued = 1
-			else
-				Rack_User[user].Sets["Rack-CombatQueue"][i].id = nil
-				Rack_User[user].Sets["Rack-CombatQueue"][i].name = nil
 			end
 			_G["ItemRackInv"..i.."Queue"]:Hide()
 			_G[ItemRack.Indexes[i].paperdoll_slot.."Queue"]:Hide()
 		end
 		if somethingQueued then
-			Rack.EquipSet("Rack-CombatQueue")
+			Rack.EquipSet("Rack-CombatQueue",nil,{items=items,completionOf=Rack.PendingCombatRequest})
 		end
 	end
 end
@@ -4813,12 +4850,18 @@ end
 
 Rack.SwapQueue = { [1]={ direction = "END" } } -- numerically-indexed queue of swaps to perform
 Rack.SwapQueueOrder = {} -- numerically-indexed queue of numbers in the order they're to be performed
+Rack.SwapUndo = {} -- implicit weapon-slot changes; never written into saved sets
+Rack.UndoToken = {} -- identifies the successful request whose undo data is retained
 
 -- wipes out an entry without creating garbage
 function Rack.ClearQueueEntry(idx)
 
 	Rack.SwapQueue[idx].direction = nil
 	Rack.SwapQueue[idx].setname = nil
+	Rack.SwapQueue[idx].restoreSetName = nil
+	Rack.SwapQueue[idx].context = nil
+	Rack.SwapQueue[idx].started = nil
+	Rack.SwapQueue[idx].deadline = nil
 	for i=0,19 do
 		Rack.SwapQueue[idx][i].id = nil
 		Rack.SwapQueue[idx][i].fromBag = nil
@@ -4952,42 +4995,141 @@ end
 	This function takes a setname and then equips the set, saving what it's replacing within the set.
 ]]
 
-function Rack.EquipSet(setname)
+-- Unlike IsSetEquipped, completion checks actual equipment, not the combat queue.
+function Rack.SwapMatches(items)
+	for i=0,19 do
+		local wanted = items[i]
+		if wanted and (wanted.id or wanted.name) then
+			local _,id,name = Rack.GetItemInfo(i)
+			if (wanted.id and id~=wanted.id) or (not wanted.id and name~=wanted.name) then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+function Rack.CompleteSwapRequest(request)
+	if not request.cancelled and not request.missing and Rack.SwapMatches(request.items) then
+		local saved = Rack_User[user].Sets[request.setname]
+		if request.undo and saved and not request.undoOf and request.setname~="Rack-CombatQueue" then
+			for i=0,19 do
+				if request.undo[i] and saved[i] then saved[i].old = request.undo[i] end
+			end
+			saved.oldsetname = request.previousSetName
+			Rack.SwapUndo[request.setname] = request.implicitUndo
+			Rack.UndoToken[request.setname] = request.undoToken
+		end
+		if request.undoOf and Rack.UndoToken[request.undoOf]==request.sourceUndoToken then
+			local old = Rack_User[user].Sets[request.undoOf]
+			if old then
+				for i=0,19 do if old[i] then old[i].old = nil end end
+				old.oldsetname = nil
+			end
+			Rack.SwapUndo[request.undoOf] = nil
+			Rack.UndoToken[request.undoOf] = nil
+		end
+		local name = request.restoreSetName or request.setname
+		if name and not string.find(name,"^Rack-") and not string.find(name,"^ItemRack") then
+			Rack_User[user].CurrentSet = name
+		end
+		if request.completionOf and Rack.PendingCombatRequest==request.completionOf then
+			Rack.CompleteSwapRequest(request.completionOf)
+			Rack.PendingCombatRequest = nil
+		end
+		return true
+	end
+end
+
+-- Cancel only slots still owned by this request; manual queue entries survive.
+function Rack.CancelDeferredRequest(request)
+	if not request then return end
+	request.cancelled = true
+	for i=0,19 do
+		if Rack.CombatQueueOwner[i]==request then
+			Rack.CombatQueue[i] = nil
+			Rack.CombatQueueOwner[i] = nil
+			_G["ItemRackInv"..i.."Queue"]:Hide()
+			_G[ItemRack.Indexes[i].paperdoll_slot.."Queue"]:Hide()
+		end
+	end
+	if Rack.PendingCombatRequest==request then Rack.PendingCombatRequest = nil end
+end
+
+function Rack.EquipSet(setname,restoreSetName,context)
 
 	local bag,slot,id,swap,idx,inv,sourceEquipSlot,destEquipSlot
-	local set = Rack_User[user].Sets[setname]
+	local saved = Rack_User[user].Sets[setname]
+	local definition = context and context.items or saved
+	local set = {}
 	local hasINVTOBAG, hasINVTOINV, hasBAGTOINV
 	local missing = "ItemRack could not find: "
 	local invStart,invEnd = 1,19 -- changes to 16,18 if in combat
 
-	if not set then
+	if not definition then
 		DEFAULT_CHAT_FRAME:AddMessage("Rack: Set \""..setname.."\" doesn't exist.")
 		return
 	end
-
-	if Rack.IsSetEquipped(setname) then
-		if not string.find(setname,"^Rack-") and not string.find(setname,"^ItemRack") then
-			Rack_User[user].CurrentSet = setname
-		end
-		Rack.StartTimer("InvUpdate")
-		return
-	end
-
-	Rack.ClearLockList()
 
 	if Rack.SetSwapping==setname then
 		Rack.OnItemLockChanged() -- if trying to swap this already, move along in queue
 		return
 	end
 
-	if (Rack.SetSwapping or Rack.IsPlayerReallyDead()) and not UnitAffectingCombat("player") then
+	for i=0,19 do
+		if definition[i] then set[i] = { id=definition[i].id, name=definition[i].name } end
+	end
+	set.showhelm,set.showcloak = definition.showhelm,definition.showcloak
+	if Rack.SwapRequest then
 		-- come back later, an EquipSet is in progress
 		idx = Rack.GetFreeQueueEntry()
 		Rack.AddQueueEntry(idx)
 		Rack.SwapQueue[idx].direction = "NEWSET"
 		Rack.SwapQueue[idx].setname = setname
+		Rack.SwapQueue[idx].restoreSetName = restoreSetName
+		Rack.SwapQueue[idx].context = context or {items=set}
 		return
 	end
+
+	Rack.ClearLockList()
+	-- Temporary weapon requirements belong to this request, not to the saved set.
+	local implicit = {}
+	local mainType
+	if set[16] and set[16].id~=0 and (set[16].id or set[16].name) then
+		inv,bag,slot = Rack.FindSetItem(set[16])
+		if inv or bag then _,_,_,mainType = Rack.GetItemInfo(inv or bag,slot) end
+	end
+	if mainType=="INVTYPE_2HWEAPON" then
+		implicit[17] = not set[17] or set[17].id~=0
+		set[17] = { id=0 }
+	elseif set[17] and set[17].id~=0 and (set[17].id or set[17].name) and not (set[16] and (set[16].id or set[16].name)) then
+		local _,_,_,wornType = Rack.GetItemInfo(16)
+		if wornType=="INVTYPE_2HWEAPON" then
+			implicit[16] = true
+			set[16] = { id=0 }
+		end
+	end
+	local request = { setname=setname, restoreSetName=restoreSetName, items=set, deferred={} }
+	if context then
+		request.undoOf,request.sourceUndoToken = context.undoOf,context.sourceUndoToken
+		request.completionOf = context.completionOf
+	end
+	local _,_,_,wornMainType = Rack.GetItemInfo(16)
+	request.offhandAfterMain = wornMainType=="INVTYPE_2HWEAPON" and set[16] and set[16].id~=0 and set[17] and set[17].id~=0
+	if Rack.PendingCombatRequest and Rack.PendingCombatRequest.setname==setname and Rack.IsSetEquipped(setname) then
+		return -- repeated requests must not toggle off already-deferred equipment
+	end
+	if setname~="Rack-CombatQueue" then
+		Rack.CancelDeferredRequest(Rack.PendingCombatRequest)
+	end
+	if not Rack.AnyLocked() and not CursorHasItem() and Rack.CompleteSwapRequest(request) then
+		Rack.StartTimer("InvUpdate")
+		return
+	end
+	Rack.SwapRequest = request
+	Rack.SetSwapping = setname
+	request.undo,request.implicitUndo,request.undoToken = {},{},{}
+	request.previousSetName = Rack_User[user].CurrentSet
 
 	-- pre-scan for items that don't need to move
 	for i=0,19 do
@@ -4995,10 +5137,16 @@ function Rack.EquipSet(setname)
 
 		if set[i] and (set[i].id or set[i].name) then
 			Rack.FindSetItem(set[i])
+			if saved and saved[i] and not saved[i].id and not implicit[i]
+				and not request.undoOf and setname~="Rack-CombatQueue" then saved[i].id = set[i].id end
 			if set[i].id==id then
 				Rack.LockList[-2][i] = 1
 			else
-				set[i].old = id -- store what was there previously
+				if implicit[i] then
+					request.implicitUndo[i] = id
+				else
+					request.undo[i] = id
+				end
 			end
 		end
 		Rack.ClearSwapListEntry(i)
@@ -5007,16 +5155,22 @@ function Rack.EquipSet(setname)
 	if UnitAffectingCombat("player") then -- player is in combat
 		for i=1,19 do
 			if set[i] and set[i].id and not Rack.SlotInfo[i].swappable then
-				Rack.AddToCombatQueue(i,set[i].id)
+				Rack.AddToCombatQueue(i,set[i].id,request)
+				request.deferred[i] = true
 			end
 		end
 		invStart,invEnd = 16,18 -- restrict swap to weapons only
 	elseif Rack.IsPlayerReallyDead() then -- player is dead
 		for i=0,19 do
 			if set[i] and set[i].id then
-				Rack.AddToCombatQueue(i,set[i].id)
+				Rack.AddToCombatQueue(i,set[i].id,request)
+				request.deferred[i] = true
 			end
 		end
+		Rack.PendingCombatRequest = request
+		Rack.SwapRequest = nil
+		Rack.SetSwapping = nil
+		Rack.ClearLockList()
 		return
 	end
 
@@ -5036,6 +5190,7 @@ function Rack.EquipSet(setname)
 				else
 					inv,bag,slot = Rack.FindSetItem(set[i])
 					if inv then -- found it in another inventory slot
+						_,set[i].id = Rack.GetItemInfo(inv)
 						Rack.LockList[-2][inv] = 1
 						_,_,_,sourceEquipSlot = Rack.GetItemInfo(inv)
 						_,_,_,destEquipSlot = Rack.GetItemInfo(i)
@@ -5047,29 +5202,22 @@ function Rack.EquipSet(setname)
 							hasINVTOBAG = 1
 						end
 					elseif bag and slot then -- found it in a bag slot
+						_,set[i].id = Rack.GetItemInfo(bag,slot)
 						Rack.LockList[bag][slot] = 1
 						swap.direction="BAGTOINV"
 						swap.sourceBag = bag
 						swap.sourceSlot = slot
-						if i==16 then -- this is a mainhand weapon
-							_,_,_,slot = Rack.GetItemInfo(swap.sourceBag,swap.sourceSlot)
-							if slot=="INVTYPE_2HWEAPON" and GetInventoryItemLink("player",17) then
-								if not set[17] then
-									set[17] = {}
-								end
-								set[17].id = 0
-								Rack.SwapList[17].needsEmptied = 1
-							end
-						end
 						hasBAGTOINV = 1
 					else -- couldn't find it
 						missing = missing..tostring(swap.desiredName)..", "
+						request.missing = true
 						swap.needsSwap = nil
 					end
 				end
 			end
 		elseif set[i] and set[i].name then -- item has no id yet, not seen since conversion
 			missing = missing..tostring(set[i].name)..", "
+			request.missing = true
 		end
 	end
 
@@ -5099,7 +5247,7 @@ function Rack.EquipSet(setname)
 		Rack.SwapQueue[idx].direction = "INVTOINV"
 		Rack.SwapQueue[idx].setname = setname
 		for i=0,19 do
-			if Rack.SwapList[i].direction=="INVTOINV" then
+			if Rack.SwapList[i].direction=="INVTOINV" and not (i==17 and request.offhandAfterMain) then
 				Rack.SwapQueue[idx][i].id = set[i].id
 				Rack.SwapQueue[idx][i].fromSlot = Rack.SwapList[i].sourceInv
 			end
@@ -5113,7 +5261,7 @@ function Rack.EquipSet(setname)
 		Rack.SwapQueue[idx].direction = "BAGTOINV"
 		Rack.SwapQueue[idx].setname = setname
 		for i=0,19 do
-			if Rack.SwapList[i].direction=="BAGTOINV" then
+			if Rack.SwapList[i].direction=="BAGTOINV" and not (i==17 and request.offhandAfterMain) then
 				Rack.SwapQueue[idx][i].id = set[i].id
 				Rack.SwapQueue[idx][i].fromBag = Rack.SwapList[i].sourceBag
 				Rack.SwapQueue[idx][i].fromSlot = Rack.SwapList[i].sourceSlot
@@ -5121,34 +5269,54 @@ function Rack.EquipSet(setname)
 		end
 	end
 
-	-- now deal with ammo why oh why can't this slot be normal
-	-- perform ammo swaps directly. since it never takes up a new bag slot it's ok to do pickups and move on
-	if set[0] and set[0].id then
+	-- Observe the replacement main hand before attempting an offhand equip.
+	if request.offhandAfterMain and Rack.SwapList[17].direction then
+		idx = Rack.GetFreeQueueEntry()
+		Rack.AddQueueEntry(idx)
+		Rack.SwapQueue[idx].direction = Rack.SwapList[17].direction
+		Rack.SwapQueue[idx].setname = setname
+		Rack.SwapQueue[idx][17].id = set[17].id
+		Rack.SwapQueue[idx][17].fromBag = Rack.SwapList[17].sourceBag
+		Rack.SwapQueue[idx][17].fromSlot = Rack.SwapList[17].sourceSlot or Rack.SwapList[17].sourceInv
+	end
+
+	-- Ammo participates in completion even when it is the only requested change.
+	bag,slot = nil,nil
+	if set[0] and (set[0].id or set[0].name) then
 		_,id = Rack.GetItemInfo(0)
 		if id~=set[0].id then
-			if set[0].id==0 then -- unequip ammo
-				bag,slot = Rack.FindSpace()
-				if bag then
-					PickupInventoryItem(0)
-					PickupContainerItem(bag,slot)
-				end
-			else
+			if set[0].id~=0 then
 				_,bag,slot = Rack.FindSetItem(set[0])
-				if bag then
-					PickupContainerItem(bag,slot)
-					PickupInventoryItem(0)
-				end
+				if bag then _,set[0].id = Rack.GetItemInfo(bag,slot) end
+			end
+			if set[0].id==0 or bag then
+				idx = Rack.GetFreeQueueEntry()
+				Rack.AddQueueEntry(idx)
+				Rack.SwapQueue[idx].direction = set[0].id==0 and "INVTOBAG" or "BAGTOINV"
+				Rack.SwapQueue[idx].setname = setname
+				Rack.SwapQueue[idx][0].id = set[0].id
+				Rack.SwapQueue[idx][0].fromBag = bag
+				Rack.SwapQueue[idx][0].fromSlot = slot
+			else
+				request.missing = true
 			end
 		end
 	end
 
-	Rack_User[user].Sets[setname].oldsetname = Rack_User[user].CurrentSet
-
-	if Rack_User[user].Sets[setname].showhelm then
-		ShowHelm(Rack_User[user].Sets[setname].showhelm)
+	-- Final verification also covers unchanged slots and missing items.
+	idx = Rack.GetFreeQueueEntry()
+	Rack.AddQueueEntry(idx)
+	Rack.SwapQueue[idx].direction = "VERIFY"
+	Rack.SwapQueue[idx].setname = setname
+	for i=0,19 do
+		if set[i] and not request.deferred[i] then Rack.SwapQueue[idx][i].id = set[i].id end
 	end
-	if Rack_User[user].Sets[setname].showcloak then
-		ShowCloak(Rack_User[user].Sets[setname].showcloak)
+
+	if set.showhelm then
+		ShowHelm(set.showhelm)
+	end
+	if set.showcloak then
+		ShowCloak(set.showcloak)
 	end
 
 	-- at last, perform the swaps by iterating over the queue
@@ -5156,25 +5324,29 @@ function Rack.EquipSet(setname)
 
 end
 
--- waits for some timed reason to do another iteration. for now just to check SpellIsTargeting once a second
+-- Reconcile once a second while a stage is active, including missed lock events.
 function Rack.IterateWait()
-
-	if SpellIsTargeting() or CursorHasItem() then
-		Rack.StartTimer("WaitToIterate",1)
-	else
-		Rack.StopTimer("WaitToIterate")
-		Rack.IterateSwapQueue()
-	end
+	Rack.IterateSwapQueue()
 end
 
-function Rack.ShutdownQueue()
+function Rack.ShutdownQueue(reason)
+	if reason then DEFAULT_CHAT_FRAME:AddMessage("ItemRack: "..reason) end
+	if Rack.SwapRequest then
+		Rack.CancelDeferredRequest(Rack.SwapRequest.completionOf)
+		Rack.CancelDeferredRequest(Rack.SwapRequest)
+	end
+	Rack.SwapRequest = nil
+	Rack.SwapIssuing = nil
 	RackFrame:UnregisterEvent("ITEM_LOCK_CHANGED")
 	Rack.SetSwapping = nil
+	Rack.StopTimer("WaitToIterate")
+	while #Rack.SwapQueueOrder>0 do
+		Rack.RemoveQueueEntry(Rack.SwapQueueOrder[#Rack.SwapQueueOrder])
+	end
+	Rack.ClearLockList()
+	for i=0,19 do Rack.ClearSwapListEntry(i) end
 	if TrinketMenu and TrinketMenu.UpdateWornTrinkets then
 		TrinketMenu.UpdateWornTrinkets()
-	end
-	for i=1,#Rack.SwapQueueOrder do
-		Rack.RemoveQueueEntry(Rack.SwapQueueOrder[i])
 	end
 end
 
@@ -5182,109 +5354,102 @@ end
 -- swaps only happen one direction at a time: INVTOBAG->INVTOINV->BAGTOINV
 -- complex swaps can require running this a few times
 function Rack.IterateSwapQueue()
-
+	if Rack.SwapIssuing then return end
+	if Rack.SwapRequest and Rack.SwapRequest.cancelled then
+		Rack.ShutdownQueue()
+		return
+	end
 	if #Rack.SwapQueueOrder<1 then
-		-- if queue is empty, unregister and leave
-		Rack.SetSwapping = nil
-		RackFrame:UnregisterEvent("ITEM_LOCK_CHANGED")
-		if TrinketMenu and TrinketMenu.UpdateWornTrinkets then
-			TrinketMenu.UpdateWornTrinkets()
+		Rack.ShutdownQueue()
+		if next(Rack.CombatQueue) and not Rack.IsPlayerReallyDead() and not UnitAffectingCombat("player") then
+			Rack.OnEvent("PLAYER_REGEN_ENABLED")
 		end
 		return
-	
-	elseif SpellIsTargeting() or CursorHasItem() then
-		-- check if in Spell Targeting mode to prevent disenchants/enchants
-		Rack.StartTimer("WaitToIterate")
+	end
+
+	Rack.SortQueue()
+	local idx = Rack.SwapQueueOrder[1]
+	local queue = Rack.SwapQueue[idx]
+	if queue.direction=="NEWSET" then
+		local setname,restoreSetName,context = queue.setname,queue.restoreSetName,queue.context
+		Rack.RemoveQueueEntry(idx)
+		Rack.EquipSet(setname,restoreSetName,context)
+		-- An already-equipped or deleted set need not produce any stages.
+		if not Rack.SwapRequest then Rack.IterateSwapQueue() end
 		return
+	end
 
-	elseif Rack.IsPlayerReallyDead() then
-		-- if player is dead, they can't swap anything, leave for now
+	queue.deadline = queue.deadline or (GetTime()+10)
+	if queue.started then
+		Rack.OnItemLockChanged()
 		return
+	end
+	if GetTime()>=queue.deadline then
+		Rack.ShutdownQueue("Swap timed out before it could start.")
+		return
+	end
+	Rack.StartTimer("WaitToIterate",1)
+	if SpellIsTargeting() or CursorHasItem() or Rack.IsPlayerReallyDead() or Rack.AnyLocked() then return end
 
-	else
-
-		Rack.SortQueue() -- move NEWSETs to end of queue
-
-		local bag,slot,id
-		local idx = Rack.SwapQueueOrder[1]
-		local queue = Rack.SwapQueue[idx]
-
-		if queue.direction == "NEWSET" then
-			Rack.SetSwapping = nil
-			local setname = queue.setname
-			Rack.RemoveQueueEntry(idx)
-			RackFrame:UnregisterEvent("ITEM_LOCK_CHANGED")
-			Rack.EquipSet(setname)
-
-		else
-
-			-- something to process
-			RackFrame:RegisterEvent("ITEM_LOCK_CHANGED")
-
-			Rack.SetSwapping = Rack.SwapQueue[idx].setname
-
-			Rack.ClearLockList()
-
-			if queue.direction == "INVTOBAG" then
-				for i=0,19 do
-					if queue[i].id==0 then
-						bag,slot = Rack.FindSpace()
-						if bag then
-							queue[i].fromBag = bag
-							queue[i].fromSlot = slot
-							PickupInventoryItem(i)
-							PickupContainerItem(bag,slot)
-						else
-							Rack.NoMoreRoom()
-							queue[i].id = nil
-							queue[i].fromBag = nil
-							queue[i].fromSlot = nil
-							Rack.ShutdownQueue() -- we ran out of room, stop all swaps now
-						end
+	RackFrame:RegisterEvent("ITEM_LOCK_CHANGED")
+	Rack.SetSwapping = queue.setname
+	queue.started = true
+	Rack.SwapIssuing = true -- lock events can arrive inside a pickup call
+	Rack.ClearLockList()
+	local moved = {}
+	for i=0,19 do
+		local wanted = queue[i]
+		local _,worn = Rack.GetItemInfo(i)
+		if wanted.id and worn~=wanted.id and not moved[i] and queue.direction~="VERIFY" then
+			local bag,slot,id
+			if queue.direction=="INVTOBAG" then
+				bag,slot = Rack.FindSpace()
+				if not bag then
+					Rack.NoMoreRoom()
+					Rack.ShutdownQueue()
+					return
+				end
+				PickupInventoryItem(i)
+				PickupContainerItem(bag,slot)
+			elseif queue.direction=="INVTOINV" then
+				_,id = Rack.GetItemInfo(wanted.fromSlot)
+				if id~=wanted.id then
+					Rack.ShutdownQueue("A swap source changed.")
+					return
+				end
+				PickupInventoryItem(wanted.fromSlot)
+				PickupInventoryItem(i)
+				if queue[wanted.fromSlot].fromSlot==i then moved[wanted.fromSlot] = true end
+			elseif queue.direction=="BAGTOINV" then
+				bag,slot = wanted.fromBag,wanted.fromSlot
+				_,id = Rack.GetItemInfo(bag,slot)
+				if id~=wanted.id then
+					_,bag,slot = Rack.FindSetItem(wanted)
+					if bag then _,id = Rack.GetItemInfo(bag,slot) end
+				end
+				if not bag or id~=wanted.id then
+					Rack.ShutdownQueue("A requested item is no longer available.")
+					return
+				end
+				if i==17 then
+					local _,_,_,mainType = Rack.GetItemInfo(16)
+					if mainType=="INVTYPE_2HWEAPON" then
+						Rack.ShutdownQueue("The main-hand prerequisite did not complete.")
+						return
 					end
 				end
-			elseif queue.direction == "INVTOINV" then
-				for i=0,19 do
-					if queue[i].fromSlot then
-						PickupInventoryItem(queue[i].fromSlot)
-						PickupInventoryItem(i)
-					end
-				end
-			elseif queue.direction == "BAGTOINV" then
-				for i=0,19 do
-					if queue[i].fromBag then
-						_,id = Rack.GetItemInfo(queue[i].fromBag,queue[i].fromSlot)
-						if id == queue[i].id then
-							if i == 17 and not GetInventoryItemLink("player", 17) and GetInventoryItemLink("player", 16) then
-								-- unequip two-hand weapon if it's there
-								unequip_2h_weapon()
-							end
-							PickupContainerItem(queue[i].fromBag,queue[i].fromSlot)
-							PickupInventoryItem(i)
-						else
-							-- didn't find it at same bag spot when queued
-							_,bag,slot = Rack.FindSetItem(queue[i])
-							if bag then
-								queue[i].fromBag = bag
-								queue[i].fromSlot = slot
-								if i == 17 and not GetInventoryItemLink("player", 17) and GetInventoryItemLink("player", 16) then
-									-- unequip two-hand weapon if it's there
-									unequip_2h_weapon()
-								end
-								PickupContainerItem(bag, slot)
-								PickupInventoryItem(i)
-							else
-								queue[i].id = nil -- forget we tried
-								queue[i].fromBag = nil
-								queue[i].fromSlot = nil
-							end
-						end
-					end
-				end
+				PickupContainerItem(bag,slot)
+				PickupInventoryItem(i)
+			end
+			if CursorHasItem() then
+				ClearCursor() -- return only an item left by our own pickup pair
+				Rack.ShutdownQueue("An item move could not complete.")
+				return
 			end
 		end
 	end
-
+	Rack.SwapIssuing = nil
+	Rack.OnItemLockChanged()
 end
 
 --[[ Debug ]]--
@@ -5367,24 +5532,42 @@ end
 -- if so, remove the current queue entry and go to the next one
 -- this is where swaps end
 function Rack.OnItemLockChanged()
-
-	if not Rack.SwapQueueOrder[1] then
-		Rack.SetSwapping = nil
-		RackFrame:UnregisterEvent("ITEM_LOCK_CHANGED")
-		if TrinketMenu and TrinketMenu.UpdateWornTrinkets then
-			TrinketMenu.UpdateWornTrinkets()
-		end
+	if Rack.SwapIssuing then return end
+	if Rack.SwapRequest and Rack.SwapRequest.cancelled then
+		Rack.ShutdownQueue()
 		return
 	end
+	local idx = Rack.SwapQueueOrder[1]
+	if not idx then return end
+	local queue = Rack.SwapQueue[idx]
+	if not queue.started then return end
 
-	if not Rack.AnyLocked() then
-		local setname = Rack.SwapQueue[Rack.SwapQueueOrder[1]].setname
-		if not string.find(setname,"^Rack-") and not string.find(setname,"^ItemRack") then
-			Rack_User[user].CurrentSet = setname
+	if not CursorHasItem() and not Rack.AnyLocked() and Rack.SwapMatches(queue) then
+		if queue.direction=="VERIFY" then
+			local request = Rack.SwapRequest
+			if request.missing then
+				Rack.ShutdownQueue("The requested set is incomplete.")
+				return
+			end
+			if not Rack.CompleteSwapRequest(request) then
+				if next(request.deferred) then
+					Rack.PendingCombatRequest = request
+				else
+					Rack.ShutdownQueue("The requested set is incomplete.")
+					return
+				end
+			end
+			Rack.SwapRequest = nil
+			Rack.SetSwapping = nil
 		end
-		Rack.RemoveQueueEntry(Rack.SwapQueueOrder[1])
+		Rack.RemoveQueueEntry(idx)
+		Rack.StopTimer("WaitToIterate")
 		Rack.IterateSwapQueue()
-	end	
+	elseif GetTime()>=queue.deadline then
+		Rack.ShutdownQueue("Swap timed out before the requested equipment was observed.")
+	else
+		Rack.StartTimer("WaitToIterate",1)
+	end
 end
 
 --[[ Combat/Death Queue Processing ]]
@@ -5404,16 +5587,20 @@ function Rack.IsPlayerReallyDead()
 end
 
 -- adds an item 'id' to 'slot' queue for post-combat/death swap
-function Rack.AddToCombatQueue(slot,id)
+function Rack.AddToCombatQueue(slot,id,owner)
 	local button = _G["ItemRackInv"..slot.."Queue"]
 	local paperdoll = _G[ItemRack.Indexes[slot].paperdoll_slot.."Queue"]
 	local _,wornId = Rack.GetItemInfo(slot)
-	if Rack.CombatQueue[slot]==id or id==wornId then
+	local toggleOff = not owner and Rack.CombatQueue[slot]==id
+	if not owner then Rack.CancelDeferredRequest(Rack.CombatQueueOwner[slot]) end
+	if toggleOff or id==wornId then
 		Rack.CombatQueue[slot] = nil
+		Rack.CombatQueueOwner[slot] = nil
 		button:Hide()
 		paperdoll:Hide()
 	elseif id and id~=wornId then
 		Rack.CombatQueue[slot] = id
+		Rack.CombatQueueOwner[slot] = owner
 		local _,texture = Rack.GetNameByID(id)
 		button:SetTexture(texture)
 		button:Show()
@@ -5461,28 +5648,25 @@ end
 
 -- This function creates a set of all the items replaced by setname, and then does does an .EquipSet()
 function Rack.UnequipSet(setname)
-
---	if not Rack.IsSetEquipped(setname) then
---		return
---	end
-
-	local unequip_setname = "Rack-Unequip-"..setname
-	Rack_User[user].Sets[unequip_setname] = {}
 	local old = Rack_User[user].Sets[setname]
-	local new = Rack_User[user].Sets[unequip_setname]
-
+	if not old then return end
+	local source = Rack.SwapRequest
+	if not source or source.setname~=setname then source = Rack.PendingCombatRequest end
+	if source and source.setname~=setname then source = nil end
+	local items = {}
+	local implicit = source and source.implicitUndo or Rack.SwapUndo[setname]
 	for i=0,19 do
-		if old[i] and old[i].old then
-			new[i] = { id=old[i].old }
-			old[i].old = nil -- comment this line when a mechanism to catch enchant changes
-		end
+		local id
+		if source then id = source.undo[i] elseif old[i] then id = old[i].old end
+		if implicit and implicit[i] then id = implicit[i] end
+		if id then items[i] = { id=id } end
 	end
-
-	Rack.EquipSet(unequip_setname)
-	if old.oldsetname and not string.find(old.oldsetname,"^Rack") and not string.find(old.oldsetname,"^ItemRack") then
-		Rack_User[user].CurrentSet = Rack_User[user].Sets[setname].oldsetname
-	end
-	Rack_User[user].Sets[setname].oldsetname = nil
+	local restoreSetName = old.oldsetname
+	local token = Rack.UndoToken[setname]
+	if source then restoreSetName,token = source.previousSetName,source.undoToken end
+	-- Keep undo data available until this exact restore request succeeds.
+	Rack.EquipSet("Rack-Unequip-"..setname,restoreSetName,
+		{items=items,undoOf=setname,sourceUndoToken=token})
 end
 
 --[[ Timer maintenance

@@ -2,7 +2,7 @@
 ## Author: Gello, Fostercare5988
 ## Title: ItemRack
 ## Notes: Item sets and context menus for inventory items
-## Version: 1.99
+## Version: 2.0.0
 ## SavedVariables: ItemRack_Users, ItemRack_Settings, ItemRack_Events, Rack_User
 ## OptionalDeps: Bagnon, IsMounted, ButtonHole
 Constants.lua
