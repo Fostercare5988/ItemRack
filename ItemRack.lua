@@ -4850,6 +4850,13 @@ end
 
 Rack.SwapQueue = { [1]={ direction = "END" } } -- numerically-indexed queue of swaps to perform
 Rack.SwapQueueOrder = {} -- numerically-indexed queue of numbers in the order they're to be performed
+
+-- Read-only coordination point for addons that must not issue equipment moves
+-- while an ItemRack transaction or deferred combat swap owns the equipment.
+function Rack.IsEquipmentSwapActive()
+	return Rack.SwapRequest~=nil or Rack.SetSwapping~=nil or Rack.SwapIssuing~=nil or #Rack.SwapQueueOrder>0
+		or Rack.PendingCombatRequest~=nil or next(Rack.CombatQueue)~=nil
+end
 Rack.SwapUndo = {} -- implicit weapon-slot changes; never written into saved sets
 Rack.UndoToken = {} -- identifies the successful request whose undo data is retained
 
@@ -5345,9 +5352,6 @@ function Rack.ShutdownQueue(reason)
 	end
 	Rack.ClearLockList()
 	for i=0,19 do Rack.ClearSwapListEntry(i) end
-	if TrinketMenu and TrinketMenu.UpdateWornTrinkets then
-		TrinketMenu.UpdateWornTrinkets()
-	end
 end
 
 -- this function grabs the next swap QueueEntry and performs the swap

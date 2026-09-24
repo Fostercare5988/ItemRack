@@ -80,8 +80,8 @@ ItemRack exposes integration points for **[Bagnon](https://github.com/Fostercare
   - **Inventory Refresh**: ItemRack responds to native inventory and bag events, including `BAG_UPDATE` and `PLAYERBANKSLOTS_CHANGED`.
 - **TrinketMenu Cooperative Queueing**:
   - **Item-Use Hooks**: ItemRack uses ClassicAPI `hooksecurefunc` for `UseInventoryItem` and `UseAction` on the required enhanced client.
-  - **Swap Activity**: `Rack.SetSwapping` exposes the active set transaction to cooperating addons.
-  - **Wear Notification**: When the swap queue finishes or aborts, ItemRack calls `TrinketMenu.UpdateWornTrinkets()` if that callback is available.
+  - **Swap Activity**: Optional consumers can call `Rack.IsEquipmentSwapActive()`; it covers active stages and deferred combat work without exposing mutable queue state.
+  - **Wear Notification**: TrinketMenu observes native inventory events and reconciles its own queue after ItemRack finishes or aborts.
   - **Trinket Slot Independence**: Exclude slots 13 and 14 when saving a set to leave those slots under separate management.
 
 ---
