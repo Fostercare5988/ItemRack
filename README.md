@@ -5,7 +5,7 @@
 [![Engine](https://img.shields.io/badge/Engine-ClassicAPI%20%7C%20SuperWoW-orange.svg)](https://github.com/Fostercare5988/ItemRack)
 [![License](https://img.shields.io/badge/License-GPL--2.0-green.svg)](LICENSE)
 
-**ItemRack** is an inventory management, item set, and quick-swapping addon engineered for the **World of Warcraft 1.12.1 Enhanced Client** (ClassicAPI v1.15.8+, SuperWoW v2.2+).
+**ItemRack** is an inventory management, item set, and quick-swapping addon engineered for the **World of Warcraft 1.12.1 Enhanced Client** (ClassicAPI v1.15.12+, SuperWoW v2.2+).
 
 Originally created by Gello, with modern enhancements and maintenance by **[Fostercare5988](https://github.com/Fostercare5988)** (with contributions from McPewPew, Khalil, and the community).
 
@@ -21,6 +21,7 @@ Originally created by Gello, with modern enhancements and maintenance by **[Fost
 - **Combat Queue:** Queue non-swappable items (armor, rings, trinkets) during combat or death, then resume when equipment changes are allowed.
 - **Verified Set Completion:** Equipment is checked against the requested state before the current set changes. Failed prerequisites abort, missed events are reconciled, and stalled swap stages time out.
 - **Keybinding Support:** Bind individual gear sets or usable equipment slots to hotkeys.
+- **Poison-Aware Weapon Swap:** Swap identical weapons carrying different active poisons without relying on fixed bag positions.
 - **Minimap Button & Profiles:** Clean minimap launcher with rotation, scaling, and character-specific profiles.
 
 ---
@@ -29,7 +30,7 @@ Originally created by Gello, with modern enhancements and maintenance by **[Fost
 
 - **Client Version:** World of Warcraft 1.12.1 (Build 5875)
 - **Engine Extension Stack:**
-  - **ClassicAPI:** `v1.15.8+` (structured aura and container APIs, `hooksecurefunc`, `table.wipe`, and enhanced Lua syntax)
+  - **ClassicAPI:** `v1.15.12+` (structured aura and container APIs, per-item temporary enchant lookup, direct slot equip, and enhanced Lua syntax)
   - **SuperWoW:** `v2.2+` (required by ItemRack's startup guard)
 
 Bagnon and TrinketMenu integrations are optional; they are not required to use ItemRack. No additional DLL dependency is required for these integrations.
@@ -56,6 +57,19 @@ Bagnon and TrinketMenu integrations are optional; they are not required to use I
 - `/itemrack reset` — Reset bar position and settings
 - `/itemrack reset events` — Restore default automated events from `Events.lua`
 - `/itemrack reset everything` — Restore addon to default state
+
+### Swapping Identical Poisoned Weapons
+
+Equip one weapon in your off hand and carry an identical weapon with a different active poison in any bag slot. Use this macro:
+
+```text
+#showtooltip 17
+/run ItemRack_SwapPoison()
+```
+
+The function compares item IDs and active temporary enchant IDs, then equips the exact matching bag instance into slot 17. The weapon that was equipped keeps its poison when returned to a bag. Bag sorting does not affect selection. For main hand, call `ItemRack_SwapPoison(16)` and use `#showtooltip 16`.
+
+If more than one bagged copy has a different active temporary enchant, the function stops rather than choosing arbitrarily. Pass a specific target enchant ID as the second argument, for example `ItemRack_SwapPoison(17, 323)`. `/dump C_Item.GetItemTempEnchantInfo({equipmentSlotIndex=17})` shows the equipped weapon's enchant ID; `/dump C_Item.GetItemTempEnchantInfo({bagID=0,slotIndex=1})` inspects backpack slot 1. The function also stops if the equipped or target weapon has no active temporary enchant, or if an ItemRack set swap is active. An equip request can still be refused by the game; verify the change in the character pane during initial testing.
 
 ### Creating a Set
 1. Open the Character Sheet (`C`).

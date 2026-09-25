@@ -9,5 +9,6 @@ Constants.lua
 Events.lua
 mountGUID.lua
 ItemRack.lua
+PoisonSwap.lua
 ItemRack.xml
 ItemRackSets.xml
