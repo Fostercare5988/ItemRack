@@ -5,7 +5,7 @@
 [![Engine](https://img.shields.io/badge/Engine-ClassicAPI%20%7C%20SuperWoW-orange.svg)](https://github.com/Fostercare5988/ItemRack)
 [![License](https://img.shields.io/badge/License-GPL--2.0-green.svg)](LICENSE)
 
-**ItemRack** is an inventory management, item set, and quick-swapping addon engineered for the **World of Warcraft 1.12.1 Enhanced Client** (ClassicAPI v1.15.12+, SuperWoW v2.2+).
+**ItemRack** is an inventory management, item set, and quick-swapping addon engineered for the **World of Warcraft 1.12.1 Enhanced Client** (ClassicAPI v1.15.14+, SuperWoW v2.2+).
 
 Originally created by Gello, with modern enhancements and maintenance by **[Fostercare5988](https://github.com/Fostercare5988)** (with contributions from McPewPew, Khalil, and the community).
 
@@ -30,7 +30,7 @@ Originally created by Gello, with modern enhancements and maintenance by **[Fost
 
 - **Client Version:** World of Warcraft 1.12.1 (Build 5875)
 - **Engine Extension Stack:**
-  - **ClassicAPI:** `v1.15.12+` (structured aura and container APIs, per-item temporary enchant lookup, direct slot equip, and enhanced Lua syntax)
+  - **ClassicAPI:** `v1.15.14+` (structured aura and container APIs, per-item temporary enchant lookup, direct slot equip, and enhanced Lua syntax)
   - **SuperWoW:** `v2.2+` (required by ItemRack's startup guard)
 
 Bagnon and TrinketMenu integrations are optional; they are not required to use ItemRack. No additional DLL dependency is required for these integrations.
