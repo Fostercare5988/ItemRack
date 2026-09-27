@@ -1,4 +1,5 @@
 ## Interface: 11200
+## X-ClassicAPI-Min-Version: 1.15.15
 ## Author: Gello, Fostercare5988
 ## Title: ItemRack
 ## Notes: Item sets and context menus for inventory items

@@ -98,3 +98,8 @@ The APIs used were also checked against the official v1.15.14 reference; its exi
 - Rework: precise durability signature was corrected during source review; source verification also prevented falsely assuming explicit equip preserves a busy cursor.
 - Exploration cost: reading unrelated whole source files was unnecessary; future reviews should retrieve the relevant function and its contract first.
 - Framework lesson gate: cursor/async ownership and capability-specific floors are already covered by VanillaForge. No new Known Pattern or framework change is required.
+
+
+Support policy update (2026-09-27): the published ClassicAPI minimum is now
+v1.15.15+ by explicit maintainer decision. Older capability evidence above is
+retained as audit history; it does not describe the current startup guard.

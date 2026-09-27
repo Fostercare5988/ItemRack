@@ -1,13 +1,13 @@
 # ItemRack (Enhanced 1.12.1 Client)
 
-Recommended ClassicAPI version: **v1.15.15+**. ItemRack's enforced minimum is **v1.15.14+**, which covers every API used by this modernization. Native equipment-set action buttons require v1.15.15; after updating the DLL, fully restart the game client.
+Required ClassicAPI version: **v1.15.15+**. This is the maintainer's published support baseline for this addon suite; it is not a claim that every API used here was introduced in v1.15.15. After replacing ClassicAPI.dll, fully restart WoW; `/reload` cannot reload a DLL.
 
 [![Interface](https://img.shields.io/badge/Interface-1.12.1%20%28Build%205875%29-blue.svg)](https://github.com/Fostercare5988/ItemRack)
 [![Version](https://img.shields.io/badge/Version-2.0.0-brightgreen.svg)](https://github.com/Fostercare5988/ItemRack)
 [![Engine](https://img.shields.io/badge/Engine-ClassicAPI%20%7C%20SuperWoW-orange.svg)](https://github.com/Fostercare5988/ItemRack)
 [![License](https://img.shields.io/badge/License-GPL--2.0-green.svg)](LICENSE)
 
-**ItemRack** is an inventory management, item set, and quick-swapping addon engineered for the **World of Warcraft 1.12.1 Enhanced Client** (ClassicAPI v1.15.14+, SuperWoW v2.2+).
+**ItemRack** is an inventory management, item set, and quick-swapping addon engineered for the **World of Warcraft 1.12.1 Enhanced Client** (ClassicAPI v1.15.15+, SuperWoW v2.2+).
 
 Originally created by Gello, with modern enhancements and maintenance by **[Fostercare5988](https://github.com/Fostercare5988)** (with contributions from McPewPew, Khalil, and the community).
 
@@ -35,7 +35,7 @@ Originally created by Gello, with modern enhancements and maintenance by **[Fost
 
 - **Client Version:** World of Warcraft 1.12.1 (Build 5875)
 - **Engine Extension Stack:**
-  - **ClassicAPI:** `v1.15.14+` (structured aura and container APIs, per-item temporary enchant lookup, direct slot equip, and enhanced Lua syntax)
+  - **ClassicAPI:** `v1.15.15+` (structured aura and container APIs, per-item temporary enchant lookup, direct slot equip, and enhanced Lua syntax)
   - **SuperWoW:** `v2.2+` (required by ItemRack's startup guard)
 
 Bagnon and TrinketMenu integrations are optional; they are not required to use ItemRack. No additional DLL dependency is required for these integrations.
@@ -130,7 +130,7 @@ The UI, automation, and bundled Rack equipment engine remain in `ItemRack.lua`. 
 - Replaced action-name scraping and compact-tooltip line scanning with item identity and durability/cooldown readers. Successful item cache fills refresh the menus.
 - Removed legacy item-use hook fallbacks, the unused mount spell dictionary, and the dead equipment-pair helper.
 - Restored the optional TrinketMenu refresh after swap state is fully released.
-- Preserved saved sets, undo, combat/death deferral, and SavedVariables declarations. The addon minimum remains v1.15.14; v1.15.15 is recommended.
+- Preserved saved sets, undo, combat/death deferral, and SavedVariables declarations. That source audit established v1.15.14 capability coverage; the subsequently chosen published support floor is v1.15.15+.
 - Validation: 45 regression tests and 5 poison-swap tests, plus Lua/XML syntax, TOC and static checks. These are headless tests; in-game verification remains required.
 
 The [modernization review](CLASSICAPI_MODERNIZATION.md) records verified APIs, retained code, and the in-game test checklist.
@@ -196,4 +196,4 @@ The [modernization review](CLASSICAPI_MODERNIZATION.md) records verified APIs, r
 - **Enhanced Client Contributors**: McPewPew, Khalil, Sleepybear
 - **License**: GNU General Public License v2 (GPL-2.0)
 
-ClassicAPI v1.15.15 compatibility: action type "equipmentset" is excluded from equipped-item use tracking. The enforced minimum remains v1.15.14; no native-set import or duplicate WEAR_EQUIPMENT_SET handler is added. Verify normal spell/item actions and a ClassicAPI equipment-set action in-game after updating the DLL and restarting WoW.
+ClassicAPI v1.15.15 compatibility: action type "equipmentset" is excluded from equipped-item use tracking. The published support minimum is v1.15.15+; no native-set import or duplicate WEAR_EQUIPMENT_SET handler is added. Verify normal spell/item actions and a ClassicAPI equipment-set action in-game after updating the DLL and restarting WoW.
