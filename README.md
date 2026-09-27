@@ -1,5 +1,7 @@
 # ItemRack (Enhanced 1.12.1 Client)
 
+Recommended ClassicAPI version: **v1.15.15+**. The existing enforced addon minimum remains unchanged because this update introduces no required new API calls. Native equipment-set action buttons require v1.15.15; after updating the DLL, fully restart the game client.
+
 [![Interface](https://img.shields.io/badge/Interface-1.12.1%20%28Build%205875%29-blue.svg)](https://github.com/Fostercare5988/ItemRack)
 [![Version](https://img.shields.io/badge/Version-2.0.0-brightgreen.svg)](https://github.com/Fostercare5988/ItemRack)
 [![Engine](https://img.shields.io/badge/Engine-ClassicAPI%20%7C%20SuperWoW-orange.svg)](https://github.com/Fostercare5988/ItemRack)
@@ -173,3 +175,5 @@ The UI, automation, and bundled Rack equipment engine remain in `ItemRack.lua`. 
 - **Modernization & Maintenance**: [Fostercare5988](https://github.com/Fostercare5988)
 - **Enhanced Client Contributors**: McPewPew, Khalil, Sleepybear
 - **License**: GNU General Public License v2 (GPL-2.0)
+
+ClassicAPI v1.15.15 compatibility: action type "equipmentset" is excluded from equipped-item/reagent-use tracking. Existing addon dependency minimums remain unchanged; no native-set import or duplicate WEAR_EQUIPMENT_SET handler is added. Verify normal spell/item actions and a ClassicAPI equipment-set action in-game after updating the DLL and restarting WoW.

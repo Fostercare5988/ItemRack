@@ -1906,6 +1906,9 @@ end
 
 -- Non-destructive handler for UseAction
 function ItemRack.OnUseAction(slot, checkCursor, onSelf)
+    -- A set action requests an equipment swap, not use of an equipped item.
+    local actionType = GetActionInfo(slot)
+    if actionType == "equipmentset" then return end
 	if IsEquippedAction(slot) and cursor_empty() then
 		local foundSlot
 		if GetActionInfo then
