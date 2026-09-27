@@ -1,6 +1,6 @@
 # ItemRack (Enhanced 1.12.1 Client)
 
-Recommended ClassicAPI version: **v1.15.15+**. The existing enforced addon minimum remains unchanged because this update introduces no required new API calls. Native equipment-set action buttons require v1.15.15; after updating the DLL, fully restart the game client.
+Recommended ClassicAPI version: **v1.15.15+**. ItemRack's enforced minimum is **v1.15.14+**, which covers every API used by this modernization. Native equipment-set action buttons require v1.15.15; after updating the DLL, fully restart the game client.
 
 [![Interface](https://img.shields.io/badge/Interface-1.12.1%20%28Build%205875%29-blue.svg)](https://github.com/Fostercare5988/ItemRack)
 [![Version](https://img.shields.io/badge/Version-2.0.0-brightgreen.svg)](https://github.com/Fostercare5988/ItemRack)
@@ -23,6 +23,9 @@ Originally created by Gello, with modern enhancements and maintenance by **[Fost
 - **Combat Queue:** Queue non-swappable items (armor, rings, trinkets) during combat or death, then resume when equipment changes are allowed.
 - **Verified Set Completion:** Equipment is checked against the requested state before the current set changes. Failed prerequisites abort, missed events are reconciled, and stalled swap stages time out.
 - **Keybinding Support:** Bind individual gear sets or usable equipment slots to hotkeys.
+- **Native Item Data:** Weapon enchant indicators, equip eligibility, soulbound filtering, and compact durability tooltips use structured engine data.
+- **Direct Equipment & Bank Moves:** Exact item locations select the intended copy; supported equips and bag/bank transfers avoid pickup pairs.
+- **Engine Timers:** ClassicAPI schedules delays and periodic work. Per-frame updates remain only for minimap dragging.
 - **Poison-Aware Weapon Swap:** Swap identical weapons carrying different active poisons without relying on fixed bag positions.
 - **Minimap Button & Profiles:** Clean minimap launcher with rotation, scaling, and character-specific profiles.
 
@@ -69,7 +72,7 @@ Equip one weapon in your off hand and carry an identical weapon with a different
 /run ItemRack_SwapPoison()
 ```
 
-The function compares item IDs and active temporary enchant IDs, then equips the exact matching bag instance into slot 17. The weapon that was equipped keeps its poison when returned to a bag. Bag sorting does not affect selection. For main hand, call `ItemRack_SwapPoison(16)` and use `#showtooltip 16`.
+The function compares item IDs and active temporary enchant IDs, then equips the exact matching bag instance into slot 17. The weapon that was equipped keeps its poison when returned to a bag. The helper leaves an existing item/spell/money/equipment-set cursor untouched and refuses spell-targeting mode. Bag sorting does not affect selection. For main hand, call `ItemRack_SwapPoison(16)` and use `#showtooltip 16`.
 
 If more than one bagged copy has a different active temporary enchant, the function stops rather than choosing arbitrarily. Pass a specific target enchant ID as the second argument, for example `ItemRack_SwapPoison(17, 323)`. `/dump C_Item.GetItemTempEnchantInfo({equipmentSlotIndex=17})` shows the equipped weapon's enchant ID; `/dump C_Item.GetItemTempEnchantInfo({bagID=0,slotIndex=1})` inspects backpack slot 1. The function also stops if the equipped or target weapon has no active temporary enchant, or if an ItemRack set swap is active. An equip request can still be refused by the game; verify the change in the character pane during initial testing.
 
@@ -106,6 +109,8 @@ ItemRack exposes integration points for **[Bagnon](https://github.com/Fostercare
 
 ItemRack includes a full event-driven scripting engine for automated gear swaps (mounting, shapeshifting, auras, low mana, combat stances).
 
+Unmodified bundled Mount and Swimming scripts are upgraded automatically; custom scripts, delays, triggers, and set associations are preserved. Swimming reacts to the breath-timer event rather than reading a specific UI's bars. It still does not restore gear when leaving water.
+
 Detailed scripting API documentation, debounce configuration, and examples are available in the **[Event Scripting Guide](EVENTS.md)**.
 
 Delayed events retain their triggering payload and set association. Disabling an event, changing its association, or opening the settings window cancels pending work. Script errors are reported with the event name, and dispatch context is restored after execution.
@@ -115,6 +120,21 @@ The UI, automation, and bundled Rack equipment engine remain in `ItemRack.lua`. 
 ---
 
 ## Changelog
+
+### ClassicAPI maintenance (2026-09-27)
+
+- Replaced temporary enchant tooltip scans and English icon-name guesses with per-instance enchant IDs, durations, charges, and spell textures. Enchants without a spell texture display a question mark.
+- Replaced equip-requirement and soulbound tooltip scans with engine readers, preserving the filter's quest/conjured exceptions.
+- Replaced supported bag-to-equipment and equipment-to-equipment pickup pairs with exact-location direct equips; replaced bag/bank pickup pairs with atomic container swaps.
+- Replaced delayed-event and periodic timer polling with cancellable ClassicAPI callbacks. Obsolete callbacks cannot consume a newer request's payload.
+- Replaced action-name scraping and compact-tooltip line scanning with item identity and durability/cooldown readers. Successful item cache fills refresh the menus.
+- Removed legacy item-use hook fallbacks, the unused mount spell dictionary, and the dead equipment-pair helper.
+- Restored the optional TrinketMenu refresh after swap state is fully released.
+- Preserved saved sets, undo, combat/death deferral, and SavedVariables declarations. The addon minimum remains v1.15.14; v1.15.15 is recommended.
+- Validation: 45 regression tests and 5 poison-swap tests, plus Lua/XML syntax, TOC and static checks. These are headless tests; in-game verification remains required.
+
+The [modernization review](CLASSICAPI_MODERNIZATION.md) records verified APIs, retained code, and the in-game test checklist.
+
 
 ### Version 2.0.0 (Comprehensive ItemRack Modernization)
 
@@ -152,7 +172,7 @@ The UI, automation, and bundled Rack equipment engine remain in `ItemRack.lua`. 
 
 ### Version 1.99.1 (Inventory Trio Synergy & Hook Modernization)
 - **Non-Destructive Hooking Pipeline**: Replaced legacy global function overwrites (`UseInventoryItem = ...`, `UseAction = ...`) with native ClassicAPI `hooksecurefunc` and safe fallback.
-- **Hardware-Accelerated Action Inspection**: Modernized `UseAction` monitoring to inspect `GetActionInfo(slot)` Item IDs directly, bypassing tooltip scanning.
+- **Structured Action Inspection**: Modernized `UseAction` monitoring to inspect `GetActionInfo(slot)` Item IDs directly, bypassing tooltip scanning.
 - **Public Set Inspection API**: Added `Rack.GetSetsWithItem(itemIdentifier)` to query all active equipment sets containing an item (by link, ID, or name).
 - **TrinketMenu Synchronization**: Calls `TrinketMenu.UpdateWornTrinkets()` when set swaps finish.
 - **Safe Table Traversal**: Converted legacy bank slot iterators to standard Lua `ipairs(ItemRack.BankSlots)` loops.
@@ -176,4 +196,4 @@ The UI, automation, and bundled Rack equipment engine remain in `ItemRack.lua`. 
 - **Enhanced Client Contributors**: McPewPew, Khalil, Sleepybear
 - **License**: GNU General Public License v2 (GPL-2.0)
 
-ClassicAPI v1.15.15 compatibility: action type "equipmentset" is excluded from equipped-item/reagent-use tracking. Existing addon dependency minimums remain unchanged; no native-set import or duplicate WEAR_EQUIPMENT_SET handler is added. Verify normal spell/item actions and a ClassicAPI equipment-set action in-game after updating the DLL and restarting WoW.
+ClassicAPI v1.15.15 compatibility: action type "equipmentset" is excluded from equipped-item use tracking. The enforced minimum remains v1.15.14; no native-set import or duplicate WEAR_EQUIPMENT_SET handler is added. Verify normal spell/item actions and a ClassicAPI equipment-set action in-game after updating the DLL and restarting WoW.

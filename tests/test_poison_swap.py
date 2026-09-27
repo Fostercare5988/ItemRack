@@ -23,6 +23,8 @@ def runtime():
         bags = {[0] = {}, [1] = {}, [2] = {}, [3] = {}, [4] = {}}
         messages, moves = {}, {}
         swapActive = false
+        function SpellIsTargeting() return targeting end
+        function GetCursorInfo() return cursorType end
         Rack = {IsEquipmentSwapActive = function() return swapActive end}
         DEFAULT_CHAT_FRAME = {
             AddMessage = function(_, message) table.insert(messages, message) end
@@ -107,6 +109,23 @@ class PoisonSwapTests(unittest.TestCase):
             bags[0][2] = {id = 777, enchant = 101}
             ItemRack_SwapPoison()
             assert(#moves == 0 and #messages == 1)
+        """)
+
+
+    def test_preserves_user_cursor_and_spell_targeting(self):
+        for cursor in ("item", "spell", "money", "equipmentset"):
+            with self.subTest(cursor=cursor):
+                lua = runtime()
+                lua.execute(f"cursorType='{cursor}'")
+                lua.execute("""
+                    bags[0][1]={id=777,enchant=202}
+                    ItemRack_SwapPoison()
+                    assert(#moves==0 and #messages==1 and cursorType)
+                """)
+        lua = runtime()
+        lua.execute("""
+            targeting=true; bags[0][1]={id=777,enchant=202}
+            ItemRack_SwapPoison(); assert(#moves==0 and #messages==1)
         """)
 
 

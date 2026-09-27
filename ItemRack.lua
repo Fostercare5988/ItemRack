@@ -166,108 +166,6 @@ local function get_or_create_enchant_overlay(btn)
 	return btn.enchantOverlay
 end
 
-local function get_enchant_texture_by_name(enchantName, enchantID)
-	if enchantName then
-		local lower = string.lower(enchantName)
-		-- Dissolvent Poison: purple icon for custom 60m poison
-		if string.find(lower, "dissolvent") then
-			return "Interface\\Icons\\Spell_Nature_SlowPoison"
-		-- Instant Poison: green icon
-		elseif string.find(lower, "instant") then
-			return "Interface\\Icons\\Ability_Poisons"
-		-- Deadly Poison: dual wield skull icon
-		elseif string.find(lower, "deadly") then
-			return "Interface\\Icons\\Ability_Rogue_DualWeild"
-		-- Crippling Poison: yellow vial
-		elseif string.find(lower, "crippling") then
-			return "Interface\\Icons\\INV_Potion_19"
-		-- Mind-numbing Poison: blue skull
-		elseif string.find(lower, "mind") then
-			return "Interface\\Icons\\Spell_Nature_NullifyDisease"
-		-- Corrosive Poison: corrosive poison vial
-		elseif string.find(lower, "corrosive") then
-			return "Interface\\Icons\\INV_Corrosive_01"
-		-- Wound Poison
-		elseif string.find(lower, "wound") then
-			return "Interface\\Icons\\INV_Misc_Herb_16"
-		-- Oils
-		elseif string.find(lower, "shadow oil") then
-			return "Interface\\Icons\\Spell_Shadow_BloodBoil"
-		elseif string.find(lower, "frost oil") then
-			return "Interface\\Icons\\Spell_Ice_Lament"
-		elseif string.find(lower, "mana oil") or string.find(lower, "wizard oil") or string.find(lower, "oil") then
-			return "Interface\\Icons\\INV_Potion_19"
-		-- Stones
-		elseif string.find(lower, "weight") then
-			return "Interface\\Icons\\INV_Stone_WeightStone_04"
-		elseif string.find(lower, "stone") then
-			return "Interface\\Icons\\INV_Stone_SharpeningStone_04"
-		-- Shaman Weapon Imbues
-		elseif string.find(lower, "windfury") then
-			return "Interface\\Icons\\Spell_Nature_Cyclone"
-		elseif string.find(lower, "flametongue") then
-			return "Interface\\Icons\\Spell_Fire_FlameTongue"
-		elseif string.find(lower, "frostbrand") then
-			return "Interface\\Icons\\Spell_Frost_FrostBrand"
-		elseif string.find(lower, "rockbiter") then
-			return "Interface\\Icons\\Spell_Nature_RockBiter"
-		end
-	end
-
-	if enchantID and type(C_Item) == "table" and type(C_Item.GetEnchantInfo) == "function" then
-		local ok, info = pcall(C_Item.GetEnchantInfo, enchantID)
-		if ok and type(info) == "table" and info.spellID and type(C_Spell) == "table" and type(C_Spell.GetSpellTexture) == "function" then
-			local tex = C_Spell.GetSpellTexture(info.spellID)
-			if tex then return tex end
-		end
-	end
-
-	return "Interface\\Icons\\Ability_Poisons"
-end
-
-local function get_equipped_enchant_name(slotID)
-	if not ItemRack_ItemTooltip then return nil end
-	ItemRack_ItemTooltip:ClearLines()
-	ItemRack_ItemTooltip:SetInventoryItem("player", slotID)
-	local n = ItemRack_ItemTooltip:NumLines()
-	for i = 2, n do
-		local line = getglobal("ItemRack_ItemTooltipTextLeft" .. i)
-		if line then
-			local text = line:GetText()
-			if text then
-				local _, _, name = string.find(text, "^(.-)%s*%(%s*%d+%s*%a+%s*%)")
-				if name and name ~= "" then
-					return name
-				end
-			end
-		end
-	end
-	return nil
-end
-
-local function get_equipped_weapon_enchant(slotID)
-	local hasEnchant, expirationMs, charges, enchantID
-	if type(GetWeaponEnchantInfo) == "function" then
-		local v1, v2, v3, v4, v5, v6, v7, v8 = GetWeaponEnchantInfo()
-		if type(v4) == "number" and (type(v5) == "boolean" or v5 == nil) then
-			-- ClassicAPI 12-value format (hasMain, exp, charges, id, hasOff, exp, charges, id, ...)
-			if slotID == 16 and v1 then
-				hasEnchant, expirationMs, charges, enchantID = true, v2, v3, v4
-			elseif slotID == 17 and v5 then
-				hasEnchant, expirationMs, charges, enchantID = true, v6, v7, v8
-			end
-		else
-			-- Vanilla 6-value format (hasMain, exp, charges, hasOff, exp, charges)
-			if slotID == 16 and v1 then
-				hasEnchant, expirationMs, charges = true, v2, v3
-			elseif slotID == 17 and v4 then
-				hasEnchant, expirationMs, charges = true, v5, v6
-			end
-		end
-	end
-	return hasEnchant, expirationMs, charges, enchantID
-end
-
 local function format_enchant_duration(expirationMs, charges)
 	local s = (type(expirationMs) == "number" and expirationMs > 0) and math.floor(expirationMs / 1000) or 0
 	local timeStr = ""
@@ -294,123 +192,40 @@ local function format_enchant_duration(expirationMs, charges)
 	return text, r, g, b
 end
 
-local function format_bag_enchant_duration(timeStr, durVal, unitChar, charges)
-	local text = timeStr or ""
-	local r, g, b = 1.0, 1.0, 1.0
-	if charges and charges > 0 and charges <= 5 then
-		text = charges .. "c"
-		r, g, b = 1.0, 0.4, 0.1
-	elseif charges and charges > 0 and charges <= 10 then
-		text = (text ~= "") and (text .. "·" .. charges) or (charges .. "c")
-		r, g, b = 1.0, 0.7, 0.2
-	elseif unitChar == "m" and durVal and durVal < 2 then
-		r, g, b = 1.0, 0.2, 0.2
-	elseif unitChar == "s" then
-		r, g, b = 1.0, 0.2, 0.2
+-- Temporary enchants are instance state, not localized tooltip text.
+local function update_enchant(btn, location)
+	if not btn then return end
+	local overlay = btn.enchantOverlay or get_or_create_enchant_overlay(btn)
+	local hasEnchant, expirationMs, charges, enchantID = C_Item.GetItemTempEnchantInfo(location)
+	if not hasEnchant then
+		overlay:Hide()
+		return
 	end
-	return text, r, g, b
+	local info = C_Item.GetEnchantInfo(enchantID)
+	local texture = info and info.spellID and C_Spell.GetSpellTexture(info.spellID)
+	overlay.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+	local text, r, g, b = format_enchant_duration(expirationMs, charges)
+	overlay.duration:SetText(text)
+	overlay.duration:SetTextColor(r, g, b)
+	overlay.iconFrame:Show()
+	overlay.duration:Show()
+	overlay:Show()
 end
 
 local function update_equipped_enchant(slotID, btn)
-	if not btn then return end
-	local overlay = btn.enchantOverlay or get_or_create_enchant_overlay(btn)
-	if not overlay then return end
-
-	if slotID ~= 16 and slotID ~= 17 then
-		overlay:Hide()
-		return
-	end
-
-	local hasItem = GetInventoryItemTexture("player", slotID)
-	if not hasItem then
-		overlay:Hide()
-		return
-	end
-
-	local hasEnchant, expirationMs, charges, enchantID = get_equipped_weapon_enchant(slotID)
-	if hasEnchant then
-		local enchantName = get_equipped_enchant_name(slotID)
-		local tex = get_enchant_texture_by_name(enchantName, enchantID)
-		overlay.icon:SetTexture(tex)
-		overlay.iconFrame:Show()
-
-		local text, r, g, b = format_enchant_duration(expirationMs, charges)
-		overlay.duration:SetText(text)
-		overlay.duration:SetTextColor(r, g, b)
-		overlay.duration:Show()
-		overlay:Show()
-	else
-		overlay.iconFrame:Hide()
-		overlay.duration:Hide()
-		overlay:Hide()
+	if slotID == 16 or slotID == 17 then
+		update_enchant(btn, {equipmentSlotIndex=slotID})
+	elseif btn and btn.enchantOverlay then
+		btn.enchantOverlay:Hide()
 	end
 end
 
 local function update_menu_weapon_enchant(btn, baggedItem)
-	if not btn then return end
-	local overlay = btn.enchantOverlay or get_or_create_enchant_overlay(btn)
-	if not overlay then return end
-
-	if not baggedItem or not baggedItem.bag or not baggedItem.slot then
-		overlay:Hide()
-		return
+	if baggedItem and baggedItem.bag and baggedItem.slot then
+		update_enchant(btn, {bagID=baggedItem.bag, slotIndex=baggedItem.slot})
+	elseif btn and btn.enchantOverlay then
+		btn.enchantOverlay:Hide()
 	end
-
-	if not ItemRack_ItemTooltip then
-		overlay:Hide()
-		return
-	end
-
-	ItemRack_ItemTooltip:ClearLines()
-	ItemRack_ItemTooltip:SetBagItem(baggedItem.bag, baggedItem.slot)
-	local n = ItemRack_ItemTooltip:NumLines()
-	for i = 2, n do
-		local line = getglobal("ItemRack_ItemTooltipTextLeft" .. i)
-		if line then
-			local text = line:GetText()
-			if text then
-				local _, _, name, durVal, durUnit = string.find(text, "^(.-)%s*%(%s*(%d+)%s*(%a+)%s*%)")
-				if name and name ~= "" then
-					local _, _, charges = string.find(text, "%(%s*(%d+)%s*charges?%s*%)")
-					local tex = get_enchant_texture_by_name(name)
-					overlay.icon:SetTexture(tex)
-					overlay.iconFrame:Show()
-
-					local unitChar = string.lower(string.sub(durUnit or "m", 1, 1))
-					local timeStr = (durVal or "") .. unitChar
-					local badgeText, r, g, b = format_bag_enchant_duration(timeStr, tonumber(durVal), unitChar, tonumber(charges))
-					overlay.duration:SetText(badgeText)
-					overlay.duration:SetTextColor(r, g, b)
-					overlay.duration:Show()
-					overlay:Show()
-					return
-				end
-			end
-		end
-	end
-
-	overlay:Hide()
-end
-
-local IRTurtle = nil
-if TURTLE_WOW_VERSION then
-	IRTurtle = true 
-else
-	IRTurtle = false
-	-- some mount textures share non-mount buff textures, if you run across one put it here
-	problem_mounts = {
-		["Interface\\Icons\\Spell_Nature_SpiritWolf"] = 1,
-		["Interface\\Icons\\Ability_Mount_PinkTiger"] = 1,
-		["Interface\\Icons\\Ability_Mount_WhiteTiger"] = 1,
-		["Interface\\Icons\\Spell_Nature_Swiftness"] = 1,
-		["Interface\\Icons\\INV_Misc_Foot_Kodo"] = 1,
-		["Interface\\Icons\\Ability_Mount_JungleTiger"] = 1,
-		["Interface\\Icons\\inv_misc_PheonixPet_01"] = 1,
-		["Interface\\Icons\\Spell_Nature_Sentinal"] = 1,
-		["Interface\\Icons\\Spell_Arcane_StarFire"] = 1,
-		["Interface\\Icons\\Ability_Mount_WhiteDireWolf"] = 1,
-		["Interface\\Icons\\INV_Misc_Key_12"] = 1,
-	}
 end
 
 local current_events_version = 1.985 -- use to control when to upgrade events
@@ -599,8 +414,6 @@ local function make_escable(frame,add)
 	end
 end
 
-local _,_,durability_pattern = string.find(DURABILITY_TEMPLATE,"(.+) .+/.+")
-durability_pattern = durability_pattern or ""
 
 -- dock-dependant offset and directions: MainDock..MenuDock
 -- x/yoff   = offset MenuFrame is positioned to InvFrame
@@ -798,46 +611,12 @@ function ItemRack_DockMenu(invslot,relativeTo)
 	ItemRack_MenuFrame:SetPoint(ItemRack.MenuDock,attachTo,ItemRack.MainDock,xoffset,yoffset)
 end
 
--- v1="Left1" or "Right1" up to "Left30" or "Right30"
-local function is_red(v1)
-
-	local its_red,r,g,b = false
-
-	r,g,b = _G["ItemRack_ItemTooltipText"..v1]:GetTextColor()
-	if r>.9 and g<.2 and b<.2 then
-		its_red = true
-	end
-
-	return its_red
-end
-
--- returns true if the player can wear this item (no red text on its tooltip)
--- separated from get_item_info because tooltip scanning should be done only at utmost need
+-- CanUseItem checks proficiency, level, class/race, skill and other requirements.
 local function player_can_wear(bag,slot,invslot)
-
-	local found,txt,itemType = false
-
-	for i=2,15 do
-		-- ClearLines doesn't remove colors, manually remove them
-		_G["ItemRack_ItemTooltipTextLeft"..i]:SetTextColor(0,0,0)
-		_G["ItemRack_ItemTooltipTextRight"..i]:SetTextColor(0,0,0)
-	end
-	ItemRack_ItemTooltip:SetBagItem(bag,slot)
-
-	for i=2,15 do
-		txt = _G["ItemRack_ItemTooltipTextLeft"..i]:GetText()
-		-- if either left or right text is red and this isn't a Durability x/x line, this item can't be worn
-		if (is_red("Left"..i) or is_red("Right"..i)) and not string.find(txt,durability_pattern) and not string.find(txt,"^Requires") then
-			found = true
-		end
-	end
-
-	_,_,_,itemType = Rack.GetItemInfo(bag,slot)
-	if itemType=="INVTYPE_WEAPON" and invslot==17 and not ItemRack.CanWearOneHandOffHand then
-		found = true
-	end
-
-	return not found
+	local itemID = C_Container.GetContainerItemID(bag,slot)
+	if not itemID or not C_PlayerInfo.CanUseItem(itemID) then return false end
+	local _,_,_,itemType = Rack.GetItemInfo(bag,slot)
+	return not (itemType=="INVTYPE_WEAPON" and invslot==17 and not ItemRack.CanWearOneHandOffHand)
 end
 
 -- the old central info gatherer, now a wrapper to Rack.GetItemInfo
@@ -862,25 +641,19 @@ local function get_item_info(bag,slot)
 		_,count = GetContainerItemInfo(bag,slot)
 	end
 	if ItemRack_Settings.Soulbound=="ON" and name then
-		local text
-		if slot then
-			ItemRack_ItemTooltip:SetBagItem(bag,slot)
-		else
-			ItemRack_ItemTooltip:SetInventoryItem("player",bag)
-		end
-		for i=2,5 do
-			text = _G["ItemRack_ItemTooltipTextLeft"..i]:GetText() or ""
-			if text==ITEM_SOULBOUND or text==ITEM_BIND_QUEST or text==ITEM_CONJURED then
-				soulbound = true
-			end
-		end
+		-- Keep the existing filter's quest/conjured exceptions.
+		-- flags is ItemStats metadata, not the item's instance flag word.
+		local location = slot and {bagID=bag,slotIndex=slot} or {equipmentSlotIndex=bag}
+		local data = C_Item.GetItemData(location)
+		soulbound = C_Item.IsBound(location)
+			or (data and (data.bindType==4 or bit.band(data.flags,2)~=0))
 	end
 
 	return texture,itemID,name,equipslot,soulbound,count,quality
 end
 
 local function cursor_empty()
-	return not (CursorHasItem() or CursorHasMoney() or CursorHasSpell())
+	return GetCursorInfo()==nil
 end
 
 -- updates cooldown spinners in the menu
@@ -1659,16 +1432,8 @@ function ItemRack_OnLoad()
 	oldItemRack_PaperDollFrame_OnShow = PaperDollFrame_OnShow
 	PaperDollFrame_OnShow = newItemRack_PaperDollFrame_OnShow
 
-	if hooksecurefunc then
-		hooksecurefunc("UseInventoryItem", ItemRack.OnUseInventoryItem)
-		hooksecurefunc("UseAction", ItemRack.OnUseAction)
-	else
-		oldItemRack_UseInventoryItem = UseInventoryItem
-		UseInventoryItem = newItemRack_UseInventoryItem
-
-		oldItemRack_UseAction = UseAction
-		UseAction = newItemRack_UseAction
-	end
+	hooksecurefunc("UseInventoryItem", ItemRack.OnUseInventoryItem)
+	hooksecurefunc("UseAction", ItemRack.OnUseAction)
 	
 	oIR_GossipTitleButton_OnClick = GossipTitleButton_OnClick
 	GossipTitleButton_OnClick = IR_GossipTitleButton_OnClick
@@ -1706,6 +1471,9 @@ local function initialize_events(v1)
 			ItemRack_Events[i].script = ItemRack_DefaultEvents[i].script
 		end
 	end
+
+	-- Only migrate exact old defaults. Custom scripts/triggers/delays stay intact.
+	ItemRack_UpgradeDefaultEvents()
 
 	-- if an event is removed, remove the associated sets from the user
 	for i in ItemRack_Users do
@@ -1761,6 +1529,13 @@ function ItemRack_OnEvent(arg1_param, arg2_param, arg3_param)
 		cacheInvalid = true
 		Rack.BankClosed()
 
+	elseif ev=="GET_ITEM_INFO_RECEIVED" then
+		if arg2 then
+			cacheInvalid = true
+			Rack.PopulateBank()
+			Rack.StartTimer("InvUpdate")
+		end
+
 	elseif ev=="BAG_UPDATE" then
 		cacheInvalid = true
 		Rack.PopulateBank()
@@ -1784,6 +1559,7 @@ function ItemRack_OnEvent(arg1_param, arg2_param, arg3_param)
 		f:RegisterEvent("UNIT_INVENTORY_CHANGED")
 		f:RegisterEvent("UPDATE_BINDINGS")
 		f:RegisterEvent("BAG_UPDATE")
+		f:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 		f:RegisterEvent("PLAYERBANKSLOTS_CHANGED")
 
 		RackFrame:RegisterEvent("PLAYER_REGEN_ENABLED") -- leaving combat
@@ -1904,51 +1680,23 @@ end
 
 --[[ Hooked functions ]]--
 
--- Non-destructive handler for UseAction
+-- Observe item use without replacing the client's UseAction.
 function ItemRack.OnUseAction(slot, checkCursor, onSelf)
-    -- A set action requests an equipment swap, not use of an equipped item.
-    local actionType = GetActionInfo(slot)
-    if actionType == "equipmentset" then return end
-	if IsEquippedAction(slot) and cursor_empty() then
-		local foundSlot
-		if GetActionInfo then
-			local actionType, actionID = GetActionInfo(slot)
-			if actionType == "item" and actionID then
-				for i = 0, 19 do
-					local link = GetInventoryItemLink("player", i)
-					if link and string.find(link, "item:" .. actionID .. ":", 1, true) then
-						foundSlot = i
-						break
-					end
-				end
-			end
-		end
-
-		if not foundSlot then
-			ItemRack_ItemTooltip:SetAction(slot)
-			local usedName = ItemRack_ItemTooltipTextLeft1:GetText()
-			if usedName then
-				for i = 1, 20 do
-					local link = GetInventoryItemLink("player", i)
-					if link and GetItemInfo(link) == usedName then
-						foundSlot = i
-						break
-					end
-				end
-			end
-		end
-
-		if foundSlot and GetActionCooldown(slot) == 0 then
-			ItemRack_ReactUseInventoryItem(foundSlot)
-		end
+	local actionType, actionID = GetActionInfo(slot)
+	if actionType~="item" and actionType~="macro" then return end
+	if not IsEquippedAction(slot) or not cursor_empty() then return end
+	if not actionID or actionType=="macro" then
+		ItemRack_ItemTooltip:ClearLines()
+		ItemRack_ItemTooltip:SetAction(slot)
+		local _,_,itemID = ItemRack_ItemTooltip:GetItem()
+		actionID = itemID
 	end
-end
-
--- if action is currently equipped, then reflect its use to the mod (legacy fallback hook)
-function newItemRack_UseAction(slot,checkCursor,onSelf)
-	ItemRack.OnUseAction(slot,checkCursor,onSelf)
-	if oldItemRack_UseAction then
-		oldItemRack_UseAction(slot,checkCursor,onSelf)
+	if not actionID then return end
+	for i=1,19 do
+		if GetInventoryItemID("player",i)==actionID then
+			if GetActionCooldown(slot)==0 then ItemRack_ReactUseInventoryItem(i) end
+			return
+		end
 	end
 end
 
@@ -2219,7 +1967,7 @@ function ItemRack_ReactUseInventoryItem(slot)
 	end
 	Rack.StartTimer("InvUpdate",1.5) -- extra long wait
 
-	local _,_,item = string.find(GetInventoryItemLink("player",slot) or "","^.*%[(.*)%].*$")
+	local item = C_Item.GetItemName({equipmentSlotIndex=slot})
 	if ItemRack_Settings.Notify=="ON" and item then
 		ItemRack.NotifyList[item] = { bag=nil, slot=nil, inv=slot }
 	end
@@ -2236,17 +1984,6 @@ end
 -- Non-destructive handler for UseInventoryItem
 function ItemRack.OnUseInventoryItem(slot)
 	if slot and slot >= 0 and slot <= 19 then
-		ItemRack_ReactUseInventoryItem(slot)
-	end
-end
-
--- hook for UseInventoryItem (legacy fallback hook)
-function newItemRack_UseInventoryItem(slot)
-	local cooldown = GetInventoryItemCooldown("player",slot)
-	if oldItemRack_UseInventoryItem then
-		oldItemRack_UseInventoryItem(slot)
-	end
-	if cooldown==0 then
 		ItemRack_ReactUseInventoryItem(slot)
 	end
 end
@@ -2345,7 +2082,7 @@ function ItemRack_Menu_OnClick(arg1)
 	local itemID = ItemRack.BaggedItems[id].id
 	this:SetChecked(0)
 
-	if SpellIsTargeting() or CursorHasItem() then return end -- prohibit swaps while in spell target/disenchant mode
+	if SpellIsTargeting() or GetCursorInfo() then return end -- prohibit swaps while in spell target/disenchant mode
 
 	if ItemRack.BankIsOpen then
 		if ItemRack.InvOpen~=20 then
@@ -2364,8 +2101,7 @@ function ItemRack_Menu_OnClick(arg1)
 				-- swap from bank to bag
 				bag,slot = Rack.FindSpace()
 				if bag then
-					PickupContainerItem(ItemRack.BaggedItems[id].bag,ItemRack.BaggedItems[id].slot)
-					PickupContainerItem(bag,slot)
+					C_Container.SwapItems(sourceBag,sourceSlot,bag,slot)
 				else
 					Rack.NoMoreRoom()
 				end
@@ -2373,8 +2109,7 @@ function ItemRack_Menu_OnClick(arg1)
 				-- swap from bag to bank
 				bag,slot = Rack.FindSpace(1)
 				if bag then
-					PickupContainerItem(ItemRack.BaggedItems[id].bag,ItemRack.BaggedItems[id].slot)
-					PickupContainerItem(bag,slot)
+					C_Container.SwapItems(sourceBag,sourceSlot,bag,slot)
 				else
 					Rack.NoMoreRoom()
 				end
@@ -2479,8 +2214,13 @@ function ItemRack_Menu_OnClick(arg1)
 					return
 				end
 			end
-			PickupContainerItem(ItemRack.BaggedItems[id].bag, ItemRack.BaggedItems[id].slot)
-			PickupInventoryItem(ItemRack.InvOpen)
+			local source = ItemRack.BaggedItems[id]
+			if ItemRack.InvOpen==0 then
+				PickupContainerItem(source.bag,source.slot)
+				PickupInventoryItem(0)
+			else
+				C_Item.EquipItemByName({bagID=source.bag,slotIndex=source.slot},ItemRack.InvOpen)
+			end
 		else
 			local bag,slot
 			-- swapping to an empty slot, create freespace
@@ -2604,35 +2344,27 @@ function ItemRack_ClearTooltip()
 	end
 end
 
--- takes the currently-built tooltip and rebuilds with just name, durability and cooldown
+-- Rebuild a compact tooltip from its item identity and structured durability/cooldown.
 local function shrink_tooltip()
-
-	local name_line,durability_line,cooldown_line,tooltip_line,item_color
-
-	name_line = GameTooltipTextLeft1:GetText()
-
-	if name_line then
-
-		for i=2,30 do
-			tooltip_line = _G["GameTooltipTextLeft"..i]:GetText() or ""
-			if string.find(tooltip_line,durability_pattern) then
-				durability_line = tooltip_line
-			elseif string.find(tooltip_line,COOLDOWN_REMAINING) then
-				cooldown_line = "|cFFFFFFFF"..tooltip_line
-			end
-		end
-
-		if ItemRack.TooltipType=="BAG" then
-			item_color = string.sub(GetContainerItemLink(ItemRack.TooltipBag,ItemRack.TooltipSlot) or "",1,10) or ""
-		else
-			item_color = string.sub(GetInventoryItemLink("player",ItemRack.TooltipSlot) or "",1,10) or ""
-		end
-
-		set_tooltip_anchor(ItemRack.TooltipOwner)
-		GameTooltip:ClearLines()
-		GameTooltip:AddLine(item_color..name_line)
-		GameTooltip:AddLine(durability_line)
-		GameTooltip:AddLine(cooldown_line)
+	local name,link = GameTooltip:GetItem()
+	if not name then return end
+	local current,maximum,start,duration
+	if ItemRack.TooltipType=="BAG" then
+		current,maximum = C_Container.GetContainerItemDurability(ItemRack.TooltipBag,ItemRack.TooltipSlot)
+		start,duration = GetContainerItemCooldown(ItemRack.TooltipBag,ItemRack.TooltipSlot)
+	else
+		current,maximum = GetInventoryItemDurability(ItemRack.TooltipSlot)
+		start,duration = GetInventoryItemCooldown("player",ItemRack.TooltipSlot)
+	end
+	set_tooltip_anchor(ItemRack.TooltipOwner)
+	GameTooltip:ClearLines()
+	GameTooltip:AddLine(string.sub(link or "",1,10)..name)
+	if maximum and maximum>0 then
+		GameTooltip:AddLine(string.format(DURABILITY_TEMPLATE,current,maximum))
+	end
+	local remaining = start and duration and (start+duration-GetTime()) or 0
+	if remaining>0 then
+		GameTooltip:AddLine(COOLDOWN_REMAINING..": "..SecondsToTime(remaining),1,1,1)
 	end
 end
 
@@ -2775,9 +2507,9 @@ function ItemRack_CooldownUpdate_OnUpdate()
 		-- go down notify list and check up on each item used
 		for i in ItemRack.NotifyList do
 			if ItemRack.NotifyList[i].inv then
-				_,_,name=string.find(GetInventoryItemLink("player",ItemRack.NotifyList[i].inv) or "","^.*%[(.*)%].*$")
+				name = C_Item.GetItemName({equipmentSlotIndex=ItemRack.NotifyList[i].inv})
 			else
-				_,_,name=string.find(GetContainerItemLink(ItemRack.NotifyList[i].bag,ItemRack.NotifyList[i].slot) or "","^.*%[(.*)%].*$")
+				name = C_Item.GetItemName({bagID=ItemRack.NotifyList[i].bag,slotIndex=ItemRack.NotifyList[i].slot})
 			end
 			if i ~= name then
 				notify_find_item(i) -- item has moved, go find it!
@@ -4163,13 +3895,14 @@ ItemRack.Register = {} -- game events (UNIT_AURA, etc) are stored here
 
 -- Cancel both the deadline and its retained payload.
 function ItemRack.CancelEvent(eventname)
+	if ItemRack.EventTimers[eventname] then
+		ItemRack.EventTimers[eventname]:Cancel()
+		ItemRack.EventTimers[eventname] = nil
+	end
 	ItemRack.EventQueue[eventname] = nil
 	ItemRack.EventQueueArg1[eventname] = nil
 	ItemRack.EventQueueArg2[eventname] = nil
 	ItemRack.EventQueueSetName[eventname] = nil
-	if not next(ItemRack.EventQueue) then
-		ItemRack_RegisterFrame:Hide()
-	end
 end
 
 -- debug function, to list registered game events and the mod events they are for
@@ -4267,7 +4000,7 @@ function ItemRack_DisableAllEvents()
 	ItemRack.EventsSuspended = true
 	ItemRack_RegisterFrame:UnregisterAllEvents()
 	table.wipe(ItemRack.Register)
-	table.wipe(ItemRack.EventQueue)
+	for eventname in ItemRack.EventQueue do ItemRack.CancelEvent(eventname) end
 	table.wipe(ItemRack.EventQueueArg1)
 	table.wipe(ItemRack.EventQueueArg2)
 	table.wipe(ItemRack.EventQueueSetName)
@@ -4277,11 +4010,10 @@ end
 
 --[[ Event Processing ]]--
 
-ItemRack.EventQueue = {} -- indexed by events ("Riding", "Warrior:Battle") of GetTime()+delay to run
+ItemRack.EventQueue = {} -- deadlines for delayed scripts; never persisted
+ItemRack.EventTimers = {} -- cancellable ClassicAPI handles
 
--- these two holders of arg1 and arg2 are separate for minimal processing to happen
--- a loop holding arg1-9 in a table takes 3.1 seconds for 100k iterations
--- storing just the first two values and moving on drops processing to 0.28 seconds
+-- Retain only the event payload and association used by the script dispatcher.
 ItemRack.EventQueueArg1 = {} -- indexed by events also, values of arg1
 ItemRack.EventQueueArg2 = {} -- indexed by events also, values of arg2
 ItemRack.EventQueueSetName = {} -- association that was active when queued
@@ -4338,35 +4070,23 @@ function ItemRack_RegisterFrame_OnEvent(arg1_param, arg2_param, arg3_param)
 				-- EventSetName is the name of the set to use for EquipSet(), it's the set associated with the event
 				run_event_script(i,a1,a2)
 			elseif event_is_enabled(i) then
+				ItemRack.CancelEvent(i)
 				ItemRack.EventQueue[i] = GetTime()+ItemRack_Events[i].delay
 				ItemRack.EventQueueArg1[i] = a1
 				ItemRack.EventQueueArg2[i] = a2
 				ItemRack.EventQueueSetName[i] = ItemRack_Users[user].Events[i].setname
-				ItemRack_RegisterFrame:Show() -- turn on OnUpdate
+				local eventname = i
+				local handle
+				handle = C_Timer.NewTimer(ItemRack_Events[i].delay,function()
+					if ItemRack.EventTimers[eventname]~=handle then return end
+					local payload1,payload2,setname = ItemRack.EventQueueArg1[eventname],ItemRack.EventQueueArg2[eventname],ItemRack.EventQueueSetName[eventname]
+					ItemRack.CancelEvent(eventname)
+					if event_is_enabled(eventname) and ItemRack_Users[user].Events[eventname].setname==setname then
+						run_event_script(eventname,payload1,payload2)
+					end
+				end)
+				ItemRack.EventTimers[i] = handle
 			end
-		end
-	end
-end
-
-local register_timer = 0
-function ItemRack_RegisterFrame_OnUpdate()
-	-- check every .25 seconds if time has elapsed for events with a delay
-	register_timer = register_timer + arg1
-	if register_timer > .25 then
-		register_timer = 0
-		local current_time = GetTime()
-		for i in ItemRack.EventQueue do
-			if ItemRack.EventQueue[i]<current_time then
-				local a1,a2,setname = ItemRack.EventQueueArg1[i],ItemRack.EventQueueArg2[i],ItemRack.EventQueueSetName[i]
-				-- Remove before running: a script may queue itself again.
-				ItemRack.CancelEvent(i)
-				if event_is_enabled(i) and ItemRack_Users[user].Events[i].setname==setname then
-					run_event_script(i,a1,a2)
-				end
-			end
-		end
-		if not next(ItemRack.EventQueue) then
-			ItemRack_RegisterFrame:Hide() -- shut down OnUpdates when nothing left to process
 		end
 	end
 end
@@ -4487,7 +4207,7 @@ Rack = {
 	version = "2.0.0",
 	debug = nil,
 
-	TimerPool = {}, -- timer tables added here ["InvUpdate"]={timer,limit,func,rep}
+	TimerPool = {}, -- runtime timer metadata and cancellable ClassicAPI handles
 
 	SetSwapping = nil, -- name of a set currently being swapped
 	SwapList = {}, -- individual item swap details go here
@@ -4589,11 +4309,7 @@ function Rack.GetItemInfo(bag,slot)
 	local id,itemLink,itemID,itemSlot,itemTexture,itemName,itemQuality
 
 	if slot then -- this is a container item
-		if type(C_Container) == "table" and type(C_Container.GetContainerItemID) == "function" then
-			if not C_Container.GetContainerItemID(bag, slot) then
-				return nil
-			end
-		end
+		if not C_Container.GetContainerItemID(bag,slot) then return nil end
 		itemLink = GetContainerItemLink(bag,slot)
 	else
 		itemLink = GetInventoryItemLink("player",bag)
@@ -4630,7 +4346,7 @@ function Rack.GetItemInfo(bag,slot)
 		end
 	end
 
-	if not itemQuality and slot and C_Container and C_Container.GetContainerItemID then
+	if not itemQuality and slot then
 		local cid = C_Container.GetContainerItemID(bag, slot)
 		if cid then
 			local _, _, q = GetItemInfo(cid)
@@ -4643,15 +4359,7 @@ end
 
 -- returns the name of an item in bag,slot
 function Rack.GetContainerItemName(bag,slot)
-	if type(C_Container) == "table" and type(C_Container.GetContainerItemID) == "function" then
-		local cid = C_Container.GetContainerItemID(bag, slot)
-		if cid and cid > 0 then
-			local name = GetItemInfo(cid)
-			if name then return name end
-		end
-	end
-	local _,_,name = string.find(GetContainerItemLink(bag,slot) or "","%[(.+)%]")
-	return name
+	return C_Item.GetItemName({bagID=bag,slotIndex=slot})
 end
 
 -- converts a name to an itemID by searching through inventory, bags and bank for the item
@@ -4703,13 +4411,7 @@ function Rack.FindSpaceInBag(bag)
 	if Rack.ValidBag(bag) then
 		for j=1,GetContainerNumSlots(bag) do
 			if not Rack.LockList[bag][j] then
-				local hasItem
-				if type(C_Container) == "table" and type(C_Container.GetContainerItemID) == "function" then
-					hasItem = C_Container.GetContainerItemID(bag, j)
-				else
-					hasItem = GetContainerItemLink(bag, j)
-				end
-				if not hasItem then
+				if not C_Container.HasContainerItem(bag,j) then
 					return j
 				end
 			end
@@ -4827,19 +4529,6 @@ function Rack.FindSetItem(setslot)
 	end
 	return inv,bag,slot
 end
-
-function Rack.InvToInvSwap(inv1,inv2)
-
-	local swap = Rack.SwapList
-
-	if swap[inv1].sourceInv==inv2 and swap[inv2].sourceInv==inv1 then
-		PickupInventoryItem(inv1)
-		PickupInventoryItem(inv2)
-		Rack.ClearSwapListEntry(inv1)
-		Rack.ClearSwapListEntry(inv2)
-	end
-end
-
 
 --[[ Queue maintenance
 
@@ -5354,6 +5043,9 @@ function Rack.ShutdownQueue(reason)
 	end
 	Rack.ClearLockList()
 	for i=0,19 do Rack.ClearSwapListEntry(i) end
+	if TrinketMenu and TrinketMenu.UpdateWornTrinkets then
+		TrinketMenu.UpdateWornTrinkets()
+	end
 end
 
 -- this function grabs the next swap QueueEntry and performs the swap
@@ -5395,20 +5087,25 @@ function Rack.IterateSwapQueue()
 		return
 	end
 	Rack.StartTimer("WaitToIterate",1)
-	if SpellIsTargeting() or CursorHasItem() or Rack.IsPlayerReallyDead() or Rack.AnyLocked() then return end
+	if SpellIsTargeting() or GetCursorInfo() or Rack.IsPlayerReallyDead() or Rack.AnyLocked() then return end
 
 	RackFrame:RegisterEvent("ITEM_LOCK_CHANGED")
 	Rack.SetSwapping = queue.setname
 	queue.started = true
-	Rack.SwapIssuing = true -- lock events can arrive inside a pickup call
+	Rack.SwapIssuing = true -- lock events can arrive inside an equip or pickup call
 	Rack.ClearLockList()
 	local moved = {}
 	for i=0,19 do
 		local wanted = queue[i]
 		local _,worn = Rack.GetItemInfo(i)
 		if wanted.id and worn~=wanted.id and not moved[i] and queue.direction~="VERIFY" then
-			local bag,slot,id
+			if SpellIsTargeting() or GetCursorInfo() then
+				Rack.ShutdownQueue("A cursor action interrupted the swap.")
+				return
+			end
+			local bag,slot,id,usedCursor
 			if queue.direction=="INVTOBAG" then
+				usedCursor = true
 				bag,slot = Rack.FindSpace()
 				if not bag then
 					Rack.NoMoreRoom()
@@ -5423,8 +5120,13 @@ function Rack.IterateSwapQueue()
 					Rack.ShutdownQueue("A swap source changed.")
 					return
 				end
-				PickupInventoryItem(wanted.fromSlot)
-				PickupInventoryItem(i)
+				if i==0 or wanted.fromSlot==0 then
+					usedCursor = true
+					PickupInventoryItem(wanted.fromSlot)
+					PickupInventoryItem(i)
+				else
+					C_Item.EquipItemByName({equipmentSlotIndex=wanted.fromSlot},i)
+				end
 				if queue[wanted.fromSlot].fromSlot==i then moved[wanted.fromSlot] = true end
 			elseif queue.direction=="BAGTOINV" then
 				bag,slot = wanted.fromBag,wanted.fromSlot
@@ -5444,10 +5146,15 @@ function Rack.IterateSwapQueue()
 						return
 					end
 				end
-				PickupContainerItem(bag,slot)
-				PickupInventoryItem(i)
+				if i==0 then -- ammo is outside ClassicAPI's destination range 1..19
+					usedCursor = true
+					PickupContainerItem(bag,slot)
+					PickupInventoryItem(i)
+				else
+					C_Item.EquipItemByName({bagID=bag,slotIndex=slot},i)
+				end
 			end
-			if CursorHasItem() then
+			if usedCursor and CursorHasItem() then
 				ClearCursor() -- return only an item left by our own pickup pair
 				Rack.ShutdownQueue("An item move could not complete.")
 				return
@@ -5676,69 +5383,65 @@ function Rack.UnequipSet(setname)
 end
 
 --[[ Timer maintenance
-
-	The goal is to reduce the processing of timer checks to as little as possible.  One OnUpdate is a central
-	repository of this mod's timers.
+	ClassicAPI owns delayed callbacks. OnUpdate is reserved for cursor-following
+	render work (IconDragging), whose zero period means once each rendered frame.
 ]]
 
-
 function Rack.CreateTimer(name,func,limit,rep)
-	Rack.TimerPool[name] = { func=func, limit=limit, timer=limit, rep=rep, enabled=nil }
+	Rack.TimerPool[name] = {func=func,limit=limit,rep=rep,generation=0}
 end
 
-function Rack.StartTimer(name,timer)
-	Rack.TimerPool[name].timer = timer or Rack.TimerPool[name].limit
-	Rack.TimerPool[name].enabled = 1
-	RackFrame:Show()
+function Rack.StartTimer(name,delay)
+	Rack.StopTimer(name)
+	local clock = Rack.TimerPool[name]
+	clock.enabled = 1
+	if clock.limit==0 and clock.rep then
+		RackFrame:Show()
+		return
+	end
+	local generation = clock.generation
+	local callback
+	callback = function()
+		if not clock.enabled or clock.generation~=generation then return end
+		clock.handle = nil
+		if clock.rep then
+			clock.handle = C_Timer.NewTimer(clock.limit,callback)
+		else
+			clock.enabled = nil
+		end
+		local ok,err = pcall(clock.func)
+		if not ok then
+			if clock.generation==generation then Rack.StopTimer(name) end
+			DEFAULT_CHAT_FRAME:AddMessage("ItemRack timer "..name..": "..tostring(err),1,0.2,0.2)
+		end
+	end
+	clock.handle = C_Timer.NewTimer(delay or clock.limit,callback)
 end
 
 function Rack.StopTimer(name)
-	Rack.TimerPool[name].enabled = nil
+	local clock = Rack.TimerPool[name]
+	if not clock then return end
+	clock.generation = clock.generation+1
+	if clock.handle then clock.handle:Cancel(); clock.handle = nil end
+	clock.enabled = nil
 	Rack.ClearStoppedTimers()
 end
 
 function Rack.ClearStoppedTimers()
-	local stuffLeft
-	for i in Rack.TimerPool do
-		stuffLeft = stuffLeft or Rack.TimerPool[i].enabled
+	for name,clock in Rack.TimerPool do
+		if clock.enabled and clock.limit==0 and clock.rep then return end
 	end
-	if not stuffLeft then
-		RackFrame:Hide()
-	end
+	RackFrame:Hide()
 end
 
 function Rack.TimerEnabled(name)
-	if Rack.TimerPool[name] and Rack.TimerPool[name].enabled then
-		return 1
-	else
-		return nil
-	end
+	return Rack.TimerPool[name] and Rack.TimerPool[name].enabled
 end
 
 function Rack.OnUpdate()
-
-	local clock,stopped
-	local elapse = tonumber(arg1) or 0.1
-
-	for i in Rack.TimerPool do
-		clock = Rack.TimerPool[i]
-		if clock.enabled then
-			clock.timer = clock.timer - elapse
-			if clock.timer<0 then
-				if clock.rep then
-					clock.timer = clock.limit -- rewind to start if 'rep' set
-				else
-					clock.enabled = nil
-					stopped = 1
-				end
-				clock.func()
-			end
-		end
+	for name,clock in Rack.TimerPool do
+		if clock.enabled and clock.limit==0 and clock.rep then clock.func() end
 	end
-	if stopped then
-		Rack.ClearStoppedTimers()
-	end
-
 end
 
 --[[ old OnUpdates : now gathered under Rack.Timers ]]
@@ -5955,7 +5658,7 @@ end
 function Rack.PullSetFromBank(setname)
 	Rack.ClearLockList()
 	local set = Rack_User[user].Sets[setname]
-	if not set or SpellIsTargeting() or CursorHasItem() then return end
+	if not set or SpellIsTargeting() or GetCursorInfo() then return end
 	local bag,slot,freeBag,freeSlot
 	for i=0,19 do
 		if set[i] then
@@ -5964,8 +5667,7 @@ function Rack.PullSetFromBank(setname)
 				if bag then
 					freeBag,freeSlot = Rack.FindSpace()
 					if freeBag then
-						PickupContainerItem(bag,slot)
-						PickupContainerItem(freeBag,freeSlot)
+						C_Container.SwapItems(bag,slot,freeBag,freeSlot)
 					else
 						Rack.NoMoreRoom()
 						return
@@ -5979,7 +5681,7 @@ end
 function Rack.PushSetToBank(setname)
 	Rack.ClearLockList()
 	local set = Rack_User[user].Sets[setname]
-	if not set or SpellIsTargeting() or CursorHasItem() then return end
+	if not set or SpellIsTargeting() or GetCursorInfo() then return end
 	local inv,bag,slot,freeBag,freeSlot
 	for i=0,19 do
 		if set[i] then
@@ -5990,8 +5692,7 @@ function Rack.PushSetToBank(setname)
 					PickupInventoryItem(inv)
 					PickupContainerItem(freeBag,freeSlot)
 				elseif bag then
-					PickupContainerItem(bag,slot)
-					PickupContainerItem(freeBag,freeSlot)
+					C_Container.SwapItems(bag,slot,freeBag,freeSlot)
 				end
 			else
 				Rack.NoMoreRoom()

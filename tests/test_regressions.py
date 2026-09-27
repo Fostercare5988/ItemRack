@@ -56,6 +56,26 @@ def runtime():
         DEFAULT_CHAT_FRAME={AddMessage=function(s,msg) table.insert(errors,msg) end}
         now=0
         function GetTime() return now end
+
+        timerHandles={}
+        C_Timer={}
+        function C_Timer.NewTimer(delay,callback)
+            local h={deadline=now+math.max(delay,0),callback=callback,cancelled=false}
+            function h:Cancel() self.cancelled=true end
+            function h:IsCancelled() return self.cancelled end
+            table.insert(timerHandles,h)
+            return h
+        end
+        function runTimers(t)
+            now=t
+            local due={}
+            for _,h in ipairs(timerHandles) do
+                if not h.cancelled and h.deadline<=now then table.insert(due,h) end
+            end
+            for _,h in ipairs(due) do
+                if not h.cancelled then h.callback(); h.cancelled=true end
+            end
+        end
     """)
     return lua
 
@@ -72,7 +92,7 @@ def automation():
             ItemRack_Users.test.Events[name]={enabled=1,setname='A'}
             ItemRack_EnableEvent(name)
         end
-        function tick(t) now=t; arg1=.3; ItemRack_RegisterFrame_OnUpdate() end
+        function tick(t) runTimers(t) end
     """)
     return lua
 
@@ -115,10 +135,13 @@ def swap_runtime():
         function UnitAffectingCombat() return combat end
         function SpellIsTargeting() return targeting end
         function CursorHasItem() return held~=nil end
+        function GetCursorInfo() return cursorType or (held and 'item') end
         function ClearCursor() held=nil; clears=clears+1 end
         function ShowHelm() end
         function ShowCloak() end
+        pickups=0
         function pickup(location,slot)
+            pickups=pickups+1
             if not held then
                 held={location=location,slot=slot}
                 if reentrant then Rack.OnItemLockChanged() end
@@ -138,13 +161,33 @@ def swap_runtime():
         end
         function PickupInventoryItem(slot) pickup(inventory,slot) end
         function PickupContainerItem(bag,slot) pickup(bags[bag],slot) end
+
+        C_Container={
+            GetContainerItemID=function(bag,slot) return bags[bag] and bags[bag][slot] end,
+            HasContainerItem=function(bag,slot) return bags[bag] and bags[bag][slot]~=nil end
+        }
+        C_Item={EquipItemByName=function(location,slot)
+            assert(slot>=1 and slot<=19)
+            -- The real API clears held cursor state before resolving the source.
+            if held then ClearCursor() end
+            assert(not cursorType)
+            local source=location.equipmentSlotIndex and inventory or bags[location.bagID]
+            local sourceSlot=location.equipmentSlotIndex or location.slotIndex
+            table.insert(moves,{source={location=source,slot=sourceSlot},location=inventory,slot=slot,direct=true})
+            local function apply()
+                if failMoves or failDestination then return end
+                source[sourceSlot],inventory[slot]=inventory[slot],source[sourceSlot]
+            end
+            if asynchronous then table.insert(pending,apply) else apply() end
+            if reentrant then Rack.OnItemLockChanged() end
+        end}
         function flush(event)
             local work=pending; pending={}
             for _,apply in ipairs(work) do apply() end
             if event then Rack.OnItemLockChanged() end
         end
         function tickSwap(t)
-            now=t; arg1=1.1; Rack.OnUpdate()
+            runTimers(t)
         end
         function clean()
             assert(not Rack.SwapRequest and not Rack.SetSwapping and not Rack.SwapIssuing)
@@ -274,7 +317,7 @@ class RegressionTests(unittest.TestCase):
         lua.execute("""
             addEvent('again', "runs=(runs or 0)+1; ItemRack_RegisterFrame_OnEvent('TEST')", 1)
             ItemRack_RegisterFrame_OnEvent('TEST'); tick(2)
-            assert(runs==1 and ItemRack.EventQueue.again==3 and ItemRack_RegisterFrame.shown)
+            assert(runs==1 and ItemRack.EventQueue.again==3 and not ItemRack_RegisterFrame.shown)
             tick(4); assert(runs==2 and ItemRack.EventQueue.again==5)
         """)
 
@@ -660,23 +703,331 @@ class RegressionTests(unittest.TestCase):
             this={GetID=function() return 1 end, SetChecked=function() end}
             function SpellIsTargeting() return false end
             function CursorHasItem() return false end
+            function GetCursorInfo() return nil end
             function ItemRack_BuildMenu() rebuilt=true end
             Rack={ClearLockList=function() end, GetItemInfo=function() return nil,currentID end}
             function Rack.FindSpace(bank) destination=bank and 'bank' or 'bags'; return 1,1 end
             moves=0
-            function PickupContainerItem() moves=moves+1 end
+            C_Container={SwapItems=function(sourceBag,sourceSlot,bag,slot)
+                assert(sourceBag==ItemRack.BaggedItems[1].bag and sourceSlot==2)
+                assert(bag==1 and slot==1)
+                moves=moves+1; return true
+            end}
             currentID='same'
         """)
         lua.execute("local cacheInvalid=false; local user='test'\n" + section(
             "function ItemRack_Menu_OnClick", "function ItemRack_MenuFrame_OnShow",
         ))
         lua.execute("""
-            ItemRack_Menu_OnClick('LeftButton'); assert(destination=='bank' and moves==2)
+            ItemRack_Menu_OnClick('LeftButton'); assert(destination=='bank' and moves==1)
             ItemRack.BaggedItems[1].bag=-1
-            ItemRack_Menu_OnClick('LeftButton'); assert(destination=='bags' and moves==4)
+            ItemRack_Menu_OnClick('LeftButton'); assert(destination=='bags' and moves==2)
             currentID='different'; ItemRack_Menu_OnClick('LeftButton')
-            assert(rebuilt and moves==4)
+            assert(rebuilt and moves==2)
         """)
+
+
+    def test_structured_enchants_equipped_bag_and_missing(self):
+        lua = runtime()
+        lua.execute("""
+            function overlay()
+                local o=frame(); o.iconFrame=frame(); o.duration=frame()
+                o.icon={SetTexture=function(s,v) s.texture=v end}
+                o.duration.SetText=function(s,v) s.text=v end
+                o.duration.SetTextColor=function(s,r,g,b) s.color={r,g,b} end
+                return o
+            end
+            equipped={enchantOverlay=overlay()}; bagged={enchantOverlay=overlay()}
+            enchants={main={true,3600000,40,101},bag={true,119000,4,202}}
+            C_Item={
+                GetItemTempEnchantInfo=function(loc)
+                    local data=loc.equipmentSlotIndex==16 and enchants.main or
+                        (loc.bagID==0 and loc.slotIndex==2 and enchants.bag)
+                    if data then return unpack(data) end
+                    return false,0,0,0
+                end,
+                GetEnchantInfo=function(id)
+                    return id==101 and {name='Localized enchant',spellID=77} or {name='Stone'}
+                end
+            }
+            C_Spell={GetSpellTexture=function(id) assert(id==77); return 'spell-icon' end}
+        """)
+        lua.execute(section("local function format_enchant_duration","local current_events_version") + """
+            refreshEquipped=update_equipped_enchant; refreshBag=update_menu_weapon_enchant
+        """)
+        lua.execute("""
+            refreshEquipped(16,equipped)
+            assert(equipped.enchantOverlay.shown and equipped.enchantOverlay.icon.texture=='spell-icon')
+            assert(equipped.enchantOverlay.duration.text=='1h')
+            refreshBag(bagged,{bag=0,slot=2})
+            assert(bagged.enchantOverlay.shown and bagged.enchantOverlay.duration.text=='4c')
+            assert(string.find(bagged.enchantOverlay.icon.texture,'QuestionMark'))
+            enchants.bag={true,59000,0,202}; refreshBag(bagged,{bag=0,slot=2})
+            assert(bagged.enchantOverlay.duration.text=='59s' and bagged.enchantOverlay.duration.color[2]==.2)
+            enchants.main=nil; refreshEquipped(16,equipped)
+            assert(not equipped.enchantOverlay.shown)
+            refreshBag(bagged,nil); assert(not bagged.enchantOverlay.shown)
+            refreshEquipped(13,equipped); refreshEquipped(16,nil)
+        """)
+
+    def test_wear_requirements_use_player_eligibility(self):
+        lua = runtime()
+        lua.execute("""
+            Rack={GetItemInfo=function() return nil,nil,nil,itemType end}
+            C_Container={GetContainerItemID=function() return itemID end}
+            C_PlayerInfo={CanUseItem=function(id) assert(id==900); return allowed end}
+            itemID=900; allowed=true; itemType='INVTYPE_WEAPON'
+        """)
+        lua.execute(section("-- CanUseItem checks","-- the old central info gatherer") + """
+            canWear=player_can_wear
+        """)
+        lua.execute("""
+            assert(canWear(0,1,16)); assert(not canWear(0,1,17))
+            ItemRack.CanWearOneHandOffHand=1; assert(canWear(0,1,17))
+            allowed=false; assert(not canWear(0,1,16))
+            allowed=true; itemType='INVTYPE_SHIELD'; assert(canWear(0,1,17))
+            itemID=nil; assert(not canWear(0,1,17))
+        """)
+
+    def test_bound_filter_preserves_quest_and_conjured_exceptions(self):
+        lua = runtime()
+        lua.execute("""
+            ItemRack_Settings.Soulbound='ON'
+            Rack={GetItemInfo=function() return 'icon','900:0:0','Name','INVTYPE_HEAD',3 end}
+            function GetContainerItemInfo() return 'icon',1 end
+            bit={band=function(value,mask) assert(mask==2); return math.floor(value/2)%2*2 end}
+            C_Item={
+                GetItemData=function(loc) assert(loc.bagID==0 and loc.slotIndex==2); return data end,
+                IsBound=function() return bound end
+            }
+        """)
+        lua.execute("local user='test'\n"+section("-- the old central info gatherer","local function cursor_empty") + """
+            function isFiltered() local _,_,_,_,bound=get_item_info(0,2); return bound end
+        """)
+        lua.execute("""
+            data={bindType=2,flags=0}; bound=false; assert(not isFiltered())
+            bound=true; assert(isFiltered())
+            bound=false; data={bindType=4,flags=0}; assert(isFiltered())
+            data={bindType=0,flags=2}; assert(isFiltered())
+            data={bindType=1,flags=0}; assert(not isFiltered())
+            data=nil; assert(not isFiltered())
+        """)
+
+    def test_compact_tooltip_reads_durability_and_cooldown(self):
+        lua = runtime()
+        lua.execute("""
+            lines={}; name='Sword'; link='|cff0070ddSword'
+            GameTooltip={
+                GetItem=function() return name,link,900 end,
+                ClearLines=function() lines={} end,
+                AddLine=function(s,text) assert(text); table.insert(lines,text) end
+            }
+            local function durability() return current,maximum end
+            C_Container={GetContainerItemDurability=function(bag,slot) assert(bag==-1 and slot==2); return durability() end}
+            function GetInventoryItemDurability(slot) assert(slot==16); return durability() end
+            function GetContainerItemCooldown() return start,duration end
+            function GetInventoryItemCooldown() return start,duration end
+            function SecondsToTime(seconds) return tostring(seconds)..'s' end
+            DURABILITY_TEMPLATE='Durability %d / %d'; COOLDOWN_REMAINING='Cooldown remaining'
+            function set_tooltip_anchor() end
+            current=0; maximum=100; start=1; duration=20; now=11
+        """)
+        lua.execute(section("-- Rebuild a compact tooltip","--[[ Cooldowns ]]--") + """
+            compact=shrink_tooltip
+        """)
+        lua.execute("""
+            ItemRack.TooltipType='INVENTORY'; ItemRack.TooltipSlot=16
+            compact(); assert(#lines==3 and lines[2]=='Durability 0 / 100')
+            assert(lines[3]=='Cooldown remaining: 10s')
+            ItemRack.TooltipType='BAG'; ItemRack.TooltipBag=-1; ItemRack.TooltipSlot=2
+            current=nil; maximum=nil; start=0; duration=0
+            compact(); assert(#lines==1)
+            name=nil; compact(); assert(#lines==1)
+        """)
+
+    def test_action_use_reads_structured_identity_and_skips_sets(self):
+        lua = runtime()
+        lua.execute("""
+            actionType='item'; actionID=900; tooltipID=901; reads=0; slots={}
+            function GetActionInfo() return actionType,actionID end
+            function IsEquippedAction() return true end
+            function cursor_empty() return not busy end
+            function GetInventoryItemID(unit,slot) assert(unit=='player'); return slots[slot] end
+            function GetActionCooldown() return cooldown or 0 end
+            function ItemRack_ReactUseInventoryItem(slot) used=slot end
+            ItemRack_ItemTooltip={
+                ClearLines=function() end,SetAction=function() reads=reads+1 end,
+                GetItem=function() return nil,nil,tooltipID end
+            }
+        """)
+        lua.execute(section("-- Observe item use","-- Inv slots are added"))
+        lua.execute("""
+            slots[13]=900; slots[14]=901
+            ItemRack.OnUseAction(1); assert(used==13 and reads==0)
+            used=nil; actionID=nil; ItemRack.OnUseAction(1); assert(used==14 and reads==1)
+            used=nil; actionType='macro'; actionID=4
+            ItemRack.OnUseAction(1); assert(used==14 and reads==2)
+            used=nil; actionType='equipmentset'; actionID='PvP'
+            ItemRack.OnUseAction(1); assert(not used and reads==2)
+            actionType='spell'; ItemRack.OnUseAction(1); assert(not used and reads==2)
+            actionType='item'; actionID=nil; tooltipID=nil
+            ItemRack.OnUseAction(1); assert(not used and reads==3)
+            actionID=900; busy=true; ItemRack.OnUseAction(1); assert(not used and reads==3)
+        """)
+
+    def test_native_timer_restart_cancel_render_and_errors(self):
+        lua = swap_runtime()
+        lua.execute("""
+            runs=0
+            Rack.CreateTimer('test',function() runs=runs+1 end,.5,1)
+            Rack.StartTimer('test',2)
+            local stale=Rack.TimerPool.test.handle
+            assert(not RackFrame.shown and Rack.TimerEnabled('test'))
+            runTimers(1); assert(runs==0)
+            Rack.StartTimer('test',.25); stale.callback(); assert(runs==0)
+            runTimers(1.3); assert(runs==1)
+            runTimers(1.9); assert(runs==2)
+            Rack.StopTimer('test'); runTimers(3); assert(runs==2)
+            Rack.CreateTimer('once',function()
+                runs=runs+1
+                if runs==3 then Rack.StartTimer('once',1) end
+            end,1)
+            Rack.StartTimer('once',0); runTimers(3); assert(runs==3 and Rack.TimerEnabled('once'))
+            runTimers(4); assert(runs==4 and not Rack.TimerEnabled('once'))
+            Rack.CreateTimer('render',function() runs=runs+1 end,0,1)
+            Rack.StartTimer('render'); assert(RackFrame.shown)
+            Rack.OnUpdate(); assert(runs==5)
+            Rack.StopTimer('render'); assert(not RackFrame.shown)
+            Rack.CreateTimer('broken',function() error('bad callback') end,.5,1)
+            Rack.StartTimer('broken'); runTimers(5)
+            assert(not Rack.TimerEnabled('broken') and #errors==1)
+            assert(string.find(errors[1],'broken') and string.find(errors[1],'bad callback'))
+            Rack.CreateTimer('zero-once',function() runs=runs+1 end,0)
+            Rack.StartTimer('zero-once'); assert(not RackFrame.shown)
+            runTimers(5); assert(runs==6 and not Rack.TimerEnabled('zero-once'))
+            runTimers(6); assert(runs==6)
+        """)
+
+    def test_cancelled_delayed_callback_cannot_consume_new_payload(self):
+        lua = automation()
+        lua.execute("""
+            addEvent('delayed','runs=(runs or 0)+1; payload=arg1',1)
+            arg1='old'; ItemRack_RegisterFrame_OnEvent('TEST')
+            local stale=ItemRack.EventTimers.delayed
+            now=.5; arg1='new'; ItemRack_RegisterFrame_OnEvent('TEST')
+            stale.callback()
+            assert(not runs and ItemRack.EventQueueArg1.delayed=='new')
+            tick(1.6); assert(runs==1 and payload=='new')
+            assert(next(ItemRack.EventTimers)==nil)
+        """)
+
+    def test_direct_equips_do_not_use_pickup_pairs(self):
+        lua = swap_runtime()
+        lua.execute("""
+            bags[0][2]='ring:new-enchant'; bags[0][1]='ring:old-enchant'
+            Rack_User.test.Sets.A={[11]={id='ring:new-enchant'}}
+            Rack.EquipSet('A'); clean()
+            assert(inventory[11]=='ring:new-enchant' and bags[0][1]=='ring:old-enchant')
+            assert(#moves==1 and moves[1].direct and pickups==0)
+            inventory[12]='other-ring'
+            Rack_User.test.Sets.B={[11]={id='other-ring'},[12]={id='ring:new-enchant'}}
+            Rack.EquipSet('B'); clean()
+            assert(inventory[12]=='ring:new-enchant' and pickups==0 and #moves==2)
+        """)
+
+    def test_set_swap_waits_for_any_user_cursor(self):
+        for cursor in ('item','spell','money','equipmentset'):
+            with self.subTest(cursor=cursor):
+                lua = swap_runtime()
+                lua.execute(f"cursorType='{cursor}'")
+                lua.execute("""
+                    bags[0][1]='ring'; Rack_User.test.Sets.A={[11]={id='ring'}}
+                    Rack.EquipSet('A'); tickSwap(11); clean()
+                    assert(#moves==0 and clears==0 and cursorType)
+                """)
+
+    def test_cursor_created_during_native_equip_is_preserved(self):
+        lua = swap_runtime()
+        lua.execute("""
+            local equip=C_Item.EquipItemByName
+            C_Item.EquipItemByName=function(loc,slot)
+                equip(loc,slot); held={location=bags[0],slot=8}
+            end
+            bags[0][1]='ring'; bags[0][2]='neck'
+            Rack_User.test.Sets.A={[11]={id='ring'},[2]={id='neck'}}
+            Rack.EquipSet('A'); clean()
+            assert(#moves==1 and held and clears==0 and Rack_User.test.CurrentSet=='Previous')
+        """)
+
+    def test_free_slot_uses_occupancy_not_item_metadata(self):
+        lua = swap_runtime()
+        lua.execute("""
+            bags[0][1]='uncached-item'; bags[0][2]='cached-item'
+            C_Container.GetContainerItemID=function() return nil end
+            assert(Rack.FindSpaceInBag(0)==3)
+            Rack.LockList[0][3]=1; assert(Rack.FindSpaceInBag(0)==4)
+        """)
+
+    def test_default_event_migration_preserves_customizations(self):
+        lua = runtime()
+        lua.execute((ROOT/'Events.lua').read_text(encoding='utf-8'))
+        lua.execute(r"""
+            local prefix='local mount = (IsMounted and IsMounted()) or (UnitIsMounted and UnitIsMounted("player")) or ItemRack_PlayerMounted()'
+            local old=prefix..'\nif not IR_MOUNT and mount then\n  EquipSet()\nelseif IR_MOUNT and not mount then\n  LoadSet()\nend\nIR_MOUNT=mount\n--[[Equips set to be worn while mounted.]]'
+            ItemRack_Events.Mount={trigger='PLAYER_AURAS_CHANGED',delay=0,script=old}
+            ItemRack_Events['Mount(Not ZG/AQ)']={trigger='CUSTOM',delay=0,script='my code'}
+            ItemRack_UpgradeDefaultEvents()
+            assert(ItemRack_Events.Mount.script==ItemRack_DefaultEvents.Mount.script)
+            assert(ItemRack_Events['Mount(Not ZG/AQ)'].script=='my code')
+            ItemRack_Events.Mount.script=old..'\nmy_custom_code()'
+            ItemRack_UpgradeDefaultEvents()
+            assert(ItemRack_Events.Mount.script==old..'\nmy_custom_code()')
+            ItemRack_Events.Mount.script=old; ItemRack_Events.Mount.delay=2
+            ItemRack_UpgradeDefaultEvents(); assert(ItemRack_Events.Mount.script==old)
+            ItemRack_UpgradeDefaultEvents()
+            function IsMounted() return mounted end
+            function EquipSet() equips=(equips or 0)+1 end
+            function LoadSet() restores=(restores or 0)+1 end
+            mounted=false; assert(loadstring(ItemRack_DefaultEvents.Mount.script))()
+            assert(not equips)
+            mounted=true; assert(loadstring(ItemRack_DefaultEvents.Mount.script))()
+            assert(equips==1)
+            mounted=false; assert(loadstring(ItemRack_DefaultEvents.Mount.script))()
+            assert(restores==1)
+            arg1='EXHAUSTION'; assert(loadstring(ItemRack_DefaultEvents.Swimming.script))()
+            assert(equips==1)
+            arg1='BREATH'; assert(loadstring(ItemRack_DefaultEvents.Swimming.script))()
+            assert(equips==2)
+        """)
+
+    def test_successful_item_cache_fill_refreshes_inventory(self):
+        lua = runtime()
+        lua.execute("""
+            updates=0; scans=0
+            Rack={
+                PopulateBank=function() scans=scans+1 end,
+                StartTimer=function(name) assert(name=='InvUpdate'); updates=updates+1 end
+            }
+        """)
+        lua.execute("local cacheInvalid=false; local user='test'\n"+section(
+            "function ItemRack_OnEvent","function ItemRack_SlashHandler",
+        ))
+        lua.execute("""
+            arg2=nil; ItemRack_OnEvent('GET_ITEM_INFO_RECEIVED'); assert(updates==0)
+            arg2=1; ItemRack_OnEvent('GET_ITEM_INFO_RECEIVED')
+            assert(updates==1 and scans==1)
+        """)
+
+    def test_toc_sources_and_event_frame_have_no_obsolete_polling(self):
+        toc=(ROOT/'ItemRack.toc').read_text(encoding='utf-8')
+        for line in toc.splitlines():
+            if line.strip() and not line.startswith('#'):
+                self.assertTrue((ROOT/line.strip()).is_file(),line)
+        self.assertNotIn('mountGUID.lua',toc)
+        self.assertNotIn('IsMounted,',toc)
+        xml=ET.parse(ROOT/'ItemRackSets.xml')
+        register=next(node for node in xml.getroot().iter() if node.attrib.get('name')=='ItemRack_RegisterFrame')
+        self.assertFalse(any(node.tag.endswith('OnUpdate') for node in register.iter()))
 
 
 if __name__ == "__main__":

@@ -97,12 +97,12 @@ ItemRack_DefaultEvents = {
 	["Mount"] = {
 		["trigger"] = "PLAYER_AURAS_CHANGED",
 		["delay"] = 0,
-		["script"] = "local mount = (IsMounted and IsMounted()) or (UnitIsMounted and UnitIsMounted(\"player\")) or ItemRack_PlayerMounted()\nif not IR_MOUNT and mount then\n  EquipSet()\nelseif IR_MOUNT and not mount then\n  LoadSet()\nend\nIR_MOUNT=mount\n--[[Equips set to be worn while mounted.]]",
+		["script"] = "local mount = IsMounted()\nif not IR_MOUNT and mount then\n  EquipSet()\nelseif IR_MOUNT and not mount then\n  LoadSet()\nend\nIR_MOUNT=mount\n--[[Equips set to be worn while mounted.]]",
 	},
 	["Swimming"] = {
 		["trigger"] = "MIRROR_TIMER_START",
 		["delay"] = 0,
-		["script"] = "local i,found\nfor i=1,3 do\n  if getglobal(\"MirrorTimer\"..i):IsVisible() and getglobal(\"MirrorTimer\"..i..\"Text\"):GetText() == BREATH_LABEL then\n    found = 1\n  end\nend\nif found then\n  EquipSet()\nend\n--[[Equips a set when the breath gauge appears. NOTE: This will not re-equip gear when you leave water.  There's no reliable way to know when you leave water. Also note: Won't work with eCastingBar.]]",
+		["script"] = "if arg1==\"BREATH\" then\n  EquipSet()\nend\n--[[Equips a set when the breath timer starts. Does not restore gear when leaving water.]]",
 	},
 	["Eating-Drinking"] = {
 		["trigger"] = "ITEMRACK_BUFFS_CHANGED",
@@ -179,7 +179,7 @@ ItemRack_DefaultEvents = {
 	["trigger"] = "PLAYER_AURAS_CHANGED",
 	["delay"] = 0,
 	["script"] =
-		"local mount = (IsMounted and IsMounted()) or (UnitIsMounted and UnitIsMounted(\"player\")) or ItemRack_PlayerMounted()\n"..
+		"local mount = IsMounted()\n"..
 		"local zone = GetRealZoneText()\n"..
 		"local outdoorRaid = (zone == \"Ahn'Qiraj\" or zone == \"Zul'Gurub\" or zone == \"Ruins of Ahn'Qiraj\")\n"..
 		"\n"..
@@ -199,3 +199,24 @@ ItemRack_DefaultEvents = {
 		"--[[Equips mount set as normal unless in ZG or AQ]]",
 	},
 }
+
+
+-- Reconstruct the former bundled scripts for exact-match upgrades.
+-- No SavedVariables version bump: that would overwrite unrelated user edits.
+local previousDefaults = {}
+for _,name in ipairs({"Mount","Mount(Not ZG/AQ)"}) do
+	previousDefaults[name] = string.gsub(ItemRack_DefaultEvents[name].script,
+		"local mount = IsMounted%(%)",
+		'local mount = (IsMounted and IsMounted()) or (UnitIsMounted and UnitIsMounted("player")) or ItemRack_PlayerMounted()')
+end
+previousDefaults.Swimming = "local i,found\nfor i=1,3 do\n  if getglobal(\"MirrorTimer\"..i):IsVisible() and getglobal(\"MirrorTimer\"..i..\"Text\"):GetText() == BREATH_LABEL then\n    found = 1\n  end\nend\nif found then\n  EquipSet()\nend\n--[[Equips a set when the breath gauge appears. NOTE: This will not re-equip gear when you leave water.  There's no reliable way to know when you leave water. Also note: Won't work with eCastingBar.]]"
+
+function ItemRack_UpgradeDefaultEvents()
+	for name,script in pairs(previousDefaults) do
+		local definition = ItemRack_Events[name]
+		local default = ItemRack_DefaultEvents[name]
+		if definition and definition.script==script and definition.trigger==default.trigger and definition.delay==default.delay then
+			definition.script = default.script
+		end
+	end
+end

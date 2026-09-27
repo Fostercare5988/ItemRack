@@ -17,6 +17,10 @@ function ItemRack_SwapPoison(slot, targetEnchantID)
 		poison_swap_message("Target poison must be a positive enchant ID.")
 		return
 	end
+	if SpellIsTargeting() or GetCursorInfo() then
+		poison_swap_message("Finish the current cursor action first.")
+		return
+	end
 	if Rack.IsEquipmentSwapActive() then
 		poison_swap_message("An ItemRack equipment swap is already active.")
 		return
@@ -62,7 +66,8 @@ function ItemRack_SwapPoison(slot, targetEnchantID)
 		return
 	end
 
-	-- Explicit destination uses ClassicAPI's direct, cursor-free equipment swap.
+	-- Explicit destination uses ClassicAPI's direct equipment swap.
+	-- The cursor check above matters: the API clears any preexisting cursor.
 	-- The engine may still reject the request; equipment events own completion.
 	C_Item.EquipItemByName(candidate, slot)
 end

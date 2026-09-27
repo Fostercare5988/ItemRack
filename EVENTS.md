@@ -13,7 +13,7 @@ All event configuration is managed directly in-game:
 4. In the event list, click the red question mark (`?`) next to an event to associate a gear set with that event trigger.
 5. An event remains inactive until a set is linked to it.
 
-To restore default events at any time without affecting custom events:
+To reset event definitions to the bundled defaults (also removes custom event definitions):
 ```text
 /itemrack reset events
 ```
@@ -35,6 +35,10 @@ Clicking **New** or **Edit** in the Events tab opens the script editor with four
 ---
 
 ## 3. Debounce Delay Mechanics
+
+ClassicAPI's cancellable timers run delayed scripts. A later trigger replaces the prior deadline and retains its payload and set association. Disabling events or opening settings cancels pending callbacks. Callbacks from an older request cannot consume a newer request's payload.
+
+Unmodified bundled Mount and Swimming scripts are upgraded automatically. User-edited scripts, triggers, delays, and set associations are preserved. Mount state uses IsMounted(); Swimming uses MIRROR_TIMER_START with arg1 == "BREATH", independent of the displayed breath bar. Swimming still only equips on breath-timer start; it does not restore gear on leaving water.
 
 Many World of Warcraft events fire in rapid bursts (e.g. `BAG_UPDATE` or `UNIT_AURA` can fire dozens of times during zoning or buff application):
 - **Delay = 0**: The script executes synchronously on every single event frame.
@@ -90,7 +94,7 @@ Include bracketed comments anywhere in your script to display helpful notes in t
 
 ## 5. Practical Script Examples
 
-### Mount Swapping (Zero-Latency Engine Integration)
+### Mount Swapping
 ```lua
 -- Trigger: UNIT_AURA | Delay: 0.1
 if ItemRack_PlayerMounted() then
