@@ -770,6 +770,58 @@ class RegressionTests(unittest.TestCase):
             refreshEquipped(13,equipped); refreshEquipped(16,nil)
         """)
 
+    def test_turtle_custom_poisons_texture_override(self):
+        lua = runtime()
+        lua.execute("""
+            function overlay()
+                local o=frame(); o.iconFrame=frame(); o.duration=frame()
+                o.icon={SetTexture=function(s,v) s.texture=v end}
+                o.duration.SetText=function(s,v) s.text=v end
+                o.duration.SetTextColor=function(s,r,g,b) s.color={r,g,b} end
+                return o
+            end
+            equipped={enchantOverlay=overlay()}
+            enchants={main={true,3600000,75,301}}
+            C_Item={
+                GetItemTempEnchantInfo=function(loc)
+                    if loc.equipmentSlotIndex==16 then return unpack(enchants.main) end
+                    return false,0,0,0
+                end,
+                GetEnchantInfo=function(id)
+                    if id==301 then return {name='Dissolvent Poison II',spellID=999} end
+                    if id==302 then return {name='Corrosive Poison',spellID=999} end
+                    return nil
+                end
+            }
+            C_Spell={GetSpellTexture=function(id) return 'cloned-instant-poison-icon' end}
+        """)
+        lua.execute(section("local function format_enchant_duration","local current_events_version") + """
+            refreshEquipped=update_equipped_enchant
+        """)
+        lua.execute(r"""
+            -- Structured info.name override for Dissolvent Poison
+            refreshEquipped(16,equipped)
+            assert(equipped.enchantOverlay.icon.texture=='Interface\\Icons\\Spell_Nature_SlowPoison')
+
+            -- Structured info.name override for Corrosive Poison
+            enchants.main={true,3600000,75,302}
+            refreshEquipped(16,equipped)
+            assert(equipped.enchantOverlay.icon.texture=='Interface\\Icons\\INV_Corrosive_01')
+
+            -- Tooltip fallback when GetEnchantInfo returns nil or no name
+            enchants.main={true,3600000,75,999}
+            ItemRack_ItemTooltip = {
+                ClearLines=function() end,
+                SetInventoryItem=function(s,unit,slot) end,
+                NumLines=function() return 5 end
+            }
+            _G.ItemRack_ItemTooltipTextLeft5 = {
+                GetText=function() return 'Dissolvent Poison II (58 min)' end
+            }
+            refreshEquipped(16,equipped)
+            assert(equipped.enchantOverlay.icon.texture=='Interface\\Icons\\Spell_Nature_SlowPoison')
+        """)
+
     def test_wear_requirements_use_player_eligibility(self):
         lua = runtime()
         lua.execute("""

@@ -192,6 +192,72 @@ local function format_enchant_duration(expirationMs, charges)
 	return text, r, g, b
 end
 
+local function get_location_enchant_name(location)
+	if not ItemRack_ItemTooltip or not location then return nil end
+	ItemRack_ItemTooltip:ClearLines()
+	if location.equipmentSlotIndex then
+		ItemRack_ItemTooltip:SetInventoryItem("player", location.equipmentSlotIndex)
+	elseif location.bagID and location.slotIndex then
+		ItemRack_ItemTooltip:SetBagItem(location.bagID, location.slotIndex)
+	else
+		return nil
+	end
+	local numLines = ItemRack_ItemTooltip:NumLines()
+	for i = 2, numLines do
+		local line = _G["ItemRack_ItemTooltipTextLeft" .. i]
+		if line then
+			local text = line:GetText()
+			if text then
+				local _, _, name = string.find(text, "^(.-)%s*%(%s*%d+")
+				if name and name ~= "" then
+					return name
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function get_enchant_texture(info, location)
+	local name = info and info.name
+	if not name and location then
+		name = get_location_enchant_name(location)
+	end
+	if not name and info and info.spellID and C_Spell and C_Spell.GetSpellName then
+		name = C_Spell.GetSpellName(info.spellID)
+	end
+
+	if name then
+		local lower = string.lower(name)
+		if string.find(lower, "dissolvent") then
+			return "Interface\\Icons\\Spell_Nature_SlowPoison"
+		elseif string.find(lower, "corrosive") then
+			return "Interface\\Icons\\INV_Corrosive_01"
+		end
+	end
+
+	if info and info.spellID and C_Spell and C_Spell.GetSpellTexture then
+		local texture = C_Spell.GetSpellTexture(info.spellID)
+		if texture then
+			return texture
+		end
+	end
+
+	if not name and location then
+		name = get_location_enchant_name(location)
+		if name then
+			local lower = string.lower(name)
+			if string.find(lower, "dissolvent") then
+				return "Interface\\Icons\\Spell_Nature_SlowPoison"
+			elseif string.find(lower, "corrosive") then
+				return "Interface\\Icons\\INV_Corrosive_01"
+			end
+		end
+	end
+
+	return "Interface\\Icons\\INV_Misc_QuestionMark"
+end
+
 -- Temporary enchants are instance state, not localized tooltip text.
 local function update_enchant(btn, location)
 	if not btn then return end
@@ -202,8 +268,7 @@ local function update_enchant(btn, location)
 		return
 	end
 	local info = C_Item.GetEnchantInfo(enchantID)
-	local texture = info and info.spellID and C_Spell.GetSpellTexture(info.spellID)
-	overlay.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+	overlay.icon:SetTexture(get_enchant_texture(info, location))
 	local text, r, g, b = format_enchant_duration(expirationMs, charges)
 	overlay.duration:SetText(text)
 	overlay.duration:SetTextColor(r, g, b)
