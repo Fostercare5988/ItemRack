@@ -1,205 +1,62 @@
-# ItemRack (Enhanced 1.12.1 Client)
+# ItemRack
 
-The [2026-09-29 integration review](INTEGRATION_REVIEW_2026-09-29.md) fixes exact
-bank-transfer identity, duplicate source selection, bank/transaction ownership,
-signed item fields and malformed saved scale/coordinates. 61 Lua tests pass;
-in-game acceptance remains pending. Custom Dissolvent/Corrosive icons and the
-existing set, undo and combat policies are preserved.
-
-Required ClassicAPI version: **v1.15.15+**. This is the maintainer's published support baseline for this addon suite; it is not a claim that every API used here was introduced in v1.15.15. After replacing ClassicAPI.dll, fully restart WoW; `/reload` cannot reload a DLL.
-
-[![Interface](https://img.shields.io/badge/Interface-1.12.1%20%28Build%205875%29-blue.svg)](https://github.com/Fostercare5988/ItemRack)
-[![Version](https://img.shields.io/badge/Version-2.0.0-brightgreen.svg)](https://github.com/Fostercare5988/ItemRack)
-[![Engine](https://img.shields.io/badge/Engine-ClassicAPI%20%7C%20SuperWoW-orange.svg)](https://github.com/Fostercare5988/ItemRack)
-[![License](https://img.shields.io/badge/License-GPL--2.0-green.svg)](LICENSE)
-
-**ItemRack** is an inventory management, item set, and quick-swapping addon engineered for the **World of Warcraft 1.12.1 Enhanced Client** (ClassicAPI v1.15.15+, SuperWoW v2.2+).
-
-Originally created by Gello, with modern enhancements and maintenance by **[Fostercare5988](https://github.com/Fostercare5988)** (with contributions from McPewPew, Khalil, and the community).
-
----
+An inventory management, equipment set, and quick-swapping add-on for World of Warcraft 1.12.1.
 
 ## Features
 
-- **Dynamic Equipment Bar:** Add, remove, and arrange gear slots and sets on a customizable HUD bar.
-- **Context Menus:** Mouse over any equipped slot on the bar or character sheet to open a flyout menu showing all eligible items from your inventory.
-- **Automated Event Triggers:** Automatically equip gear sets in response to in-game triggers (mounting, swimming, combat stance changes, shapeshifts, buffs, low mana, resting, etc.).
-- **Mount and Buff Detection:** Uses `IsMounted()` for mount state and structured `C_UnitAuras` data for buff-triggered automation.
-- **Goblin Brainwashing Device (GBD) Support:** Automatic specialization gear set swapping when interacting with the Goblin Brainwashing Device.
-- **Combat Queue:** Queue non-swappable items (armor, rings, trinkets) during combat or death, then resume when equipment changes are allowed.
-- **Verified Set Completion:** Equipment is checked against the requested state before the current set changes. Failed prerequisites abort, missed events are reconciled, and stalled swap stages time out.
-- **Keybinding Support:** Bind individual gear sets or usable equipment slots to hotkeys.
-- **Native Item Data:** Weapon enchant indicators, equip eligibility, soulbound filtering, and compact durability tooltips use structured engine data.
-- **Direct Equipment & Bank Moves:** Exact item locations select the intended copy; supported equips and bag/bank transfers avoid pickup pairs.
-- **Engine Timers:** ClassicAPI schedules delays and periodic work. Per-frame updates remain only for minimap dragging.
-- **Poison-Aware Weapon Swap:** Swap identical weapons carrying different active poisons without relying on fixed bag positions.
-- **Minimap Button & Profiles:** Clean minimap launcher with rotation, scaling, and character-specific profiles.
+- **Equipment Bar & Flyouts**: Configurable on-screen HUD bar for your gear slots and sets. Hovering over any slot opens a flyout menu of all eligible inventory items.
+- **Custom Equipment Sets**: Save complete or partial gear sets with custom names and icons; easily bind sets or individual slots to hotkeys.
+- **Automated Event Triggers**: Automatically equip sets in response to gameplay events such as mounting, swimming, shapeshifting, combat stances, or low mana.
+- **Combat Queue & Verified Swaps**: Queue non-swappable items (armor, rings, trinkets) during combat for automatic equipping upon combat exit. Gear changes are verified transactions that ensure items are confirmed worn before completing.
+- **Poison-Aware Weapon Swapping**: Swap between identical weapons carrying different active poisons via macro without relying on fixed bag slots.
+- **Suite Integration**: Cooperates cleanly with Bagnon (bank set indicators and tooltip set tags) and TrinketMenu (coordinated trinket queueing).
 
----
+## Requirements
 
-## System Requirements
+- **World of Warcraft 1.12.1** (Build 5875)
+- [ClassicAPI v1.15.15+](https://github.com/brues-code/ClassicAPI) (`ClassicAPI.dll`)
+- [SuperWoW v2.2+](https://github.com/balakethelock/SuperWoW) (`SuperWoWhook.dll` / `SuperWoWlauncher.exe`)
 
-- **Client Version:** World of Warcraft 1.12.1 (Build 5875)
-- **Engine Extension Stack:**
-  - **ClassicAPI:** `v1.15.15+` (structured aura and container APIs, per-item temporary enchant lookup, direct slot equip, and enhanced Lua syntax)
-  - **SuperWoW:** `v2.2+` (required by ItemRack's startup guard)
-
-Bagnon and TrinketMenu integrations are optional; they are not required to use ItemRack. No additional DLL dependency is required for these integrations.
-
----
+> Note: Completely restart the game client after installing or updating DLLs. `/reload` cannot reload DLLs.
 
 ## Installation
 
-1. Download or clone this repository.
-2. Place the `ItemRack` folder into your `Interface\AddOns\` directory:
+1. Copy or clone this repository into your WoW add-on directory:
+   ```text
+   World of Warcraft/Interface/AddOns/ItemRack/
    ```
-   World of Warcraft\Interface\AddOns\ItemRack\
-   ```
-3. Ensure both `ClassicAPI.dll` and `SuperWoW.dll` are active in your client.
-4. Launch the client and enable **ItemRack** on the AddOn selection screen.
+2. Verify that `ItemRack.toc` is located directly at `Interface/AddOns/ItemRack/ItemRack.toc`.
+3. Launch WoW using the SuperWoW launcher.
+4. Ensure ItemRack is checked on the character selection AddOn screen.
+
+## Useful Commands & Shortcuts
+
+| Command | Description |
+| :--- | :--- |
+| `/itemrack` | Toggle ItemRack bar visibility |
+| `/itemrack equip <setname>` | Equip a saved gear set |
+| `/itemrack toggle <setname>` | Toggle a gear set on or off |
+| `/itemrack reset` | Reset bar position and frame settings |
+| `/itemrack reset events` | Restore default event scripts |
+| `/itemrack reset everything` | Reset addon to fresh default state |
+
+| Shortcut | Context | Action |
+| :--- | :--- | :--- |
+| `Alt` + `Click` Slot | Character Sheet | Add or remove an equipment slot on the bar |
+| `Alt` + `Click` Model | Character Sheet | Add the Sets button to the bar |
+| `Alt` + Drag | ItemRack Bar | Reposition the equipment bar |
+| `Hover` over Slot | Bar or Character Sheet | Open inventory flyout menu |
+
+## Limitations & Notes
+
+- **Combat Restrictions**: Armor, rings, and trinkets cannot be swapped during combat. ItemRack places them into the combat queue and equips them immediately when combat ends.
+- **Transaction Safety**: ItemRack treats gear changes as verified transactions. If bags are full or an item is unavailable, the swap aborts cleanly to prevent partial or mismatched sets.
+- **Poison Swaps**: The `ItemRack_SwapPoison()` helper swaps identical weapons with distinct active temporary enchants. If multiple candidate weapons carry different poisons, specify the target enchant ID explicitly to prevent ambiguous choices.
 
 ---
 
-## Usage
+For detailed set management, bar setup, and poison swap macros, see the [User Guide](docs/USER_GUIDE.md). Custom event scripting is documented in the [Event Scripting Guide](EVENTS.md), and technical architecture notes are available in [INTEGRATION_REVIEW_2026-09-29.md](INTEGRATION_REVIEW_2026-09-29.md).
 
-- `/itemrack` — Toggle ItemRack bar visibility
-- `/itemrack equip <setname>` — Equip a saved gear set
-- `/itemrack toggle <setname>` — Toggle a gear set
-- `/itemrack reset` — Reset bar position and settings
-- `/itemrack reset events` — Restore default automated events from `Events.lua`
-- `/itemrack reset everything` — Restore addon to default state
+## License & Credits
 
-### Swapping Identical Poisoned Weapons
-
-Equip one weapon in your off hand and carry an identical weapon with a different active poison in any bag slot. Use this macro:
-
-```text
-#showtooltip 17
-/run ItemRack_SwapPoison()
-```
-
-The function compares item IDs and active temporary enchant IDs, then equips the exact matching bag instance into slot 17. The weapon that was equipped keeps its poison when returned to a bag. The helper leaves an existing item/spell/money/equipment-set cursor untouched and refuses spell-targeting mode. Bag sorting does not affect selection. For main hand, call `ItemRack_SwapPoison(16)` and use `#showtooltip 16`.
-
-If more than one bagged copy has a different active temporary enchant, the function stops rather than choosing arbitrarily. Pass a specific target enchant ID as the second argument, for example `ItemRack_SwapPoison(17, 323)`. `/dump C_Item.GetItemTempEnchantInfo({equipmentSlotIndex=17})` shows the equipped weapon's enchant ID; `/dump C_Item.GetItemTempEnchantInfo({bagID=0,slotIndex=1})` inspects backpack slot 1. The function also stops if the equipped or target weapon has no active temporary enchant, or if an ItemRack set swap is active. An equip request can still be refused by the game; verify the change in the character pane during initial testing.
-
-### Creating a Set
-1. Open the Character Sheet (`C`).
-2. Click the ItemRack minimap button or bar settings to open the Sets dialog.
-3. Select which gear slots to include, choose a name and an icon, then click **Save**.
-
-### Setting Up the Bar
-- `Alt + Click` any slot on your character sheet to add or remove it from the bar.
-- `Alt + Click` your 3D character model on the sheet to add the Sets button to the bar.
-- `Alt + Drag` to move the bar when locked.
-
----
-
-## Suite Synergy: The Inventory & Equipment Trio
-
-ItemRack exposes integration points for **[Bagnon](https://github.com/Fostercare5988/Bagnon)** and **[TrinketMenu](https://github.com/Fostercare5988/TrinketMenu)**. Both addons are optional:
-
-- **Bagnon Bank & Bag Coordination**:
-  - **Bank Detection**: ItemRack uses native `BANKFRAME_OPENED` and `BANKFRAME_CLOSED` events to track access to bank items.
-  - **Visual Bank Borders**: Items in your bank belonging to an ItemRack set or slot menu display a distinct **blue border** in ItemRack menus.
-  - **Tooltip Set Indicators**: ItemRack exports `Rack.GetSetsWithItem(link)` so cooperating addons can query which saved sets contain an item.
-  - **Inventory Refresh**: ItemRack responds to native inventory and bag events, including `BAG_UPDATE` and `PLAYERBANKSLOTS_CHANGED`.
-- **TrinketMenu Cooperative Queueing**:
-  - **Item-Use Hooks**: ItemRack uses ClassicAPI `hooksecurefunc` for `UseInventoryItem` and `UseAction` on the required enhanced client.
-  - **Swap Activity**: Optional consumers can call `Rack.IsEquipmentSwapActive()`; it covers active stages and deferred combat work without exposing mutable queue state.
-  - **Wear Notification**: TrinketMenu observes native inventory events and reconciles its own queue after ItemRack finishes or aborts.
-  - **Trinket Slot Independence**: Exclude slots 13 and 14 when saving a set to leave those slots under separate management.
-
----
-
-## Event Scripting
-
-ItemRack includes a full event-driven scripting engine for automated gear swaps (mounting, shapeshifting, auras, low mana, combat stances).
-
-Unmodified bundled Mount and Swimming scripts are upgraded automatically; custom scripts, delays, triggers, and set associations are preserved. Swimming reacts to the breath-timer event rather than reading a specific UI's bars. It still does not restore gear when leaving water.
-
-Detailed scripting API documentation, debounce configuration, and examples are available in the **[Event Scripting Guide](EVENTS.md)**.
-
-Delayed events retain their triggering payload and set association. Disabling an event, changing its association, or opening the settings window cancels pending work. Script errors are reported with the event name, and dispatch context is restored after execution.
-
-The UI, automation, and bundled Rack equipment engine remain in `ItemRack.lua`. `Constants.lua` supplies text and bindings, `Events.lua` supplies default automation scripts, and XML defines the frames. Swap requests, weapon prerequisites, and combat/undo scratch requirements are runtime state; user settings, set definitions, and saved undo fields retain the existing SavedVariables format. Equipment events drive swap progress, with a one-second reconciliation check and a ten-second deadline for each stage.
-
----
-
-## Changelog
-
-### ClassicAPI maintenance (2026-09-27)
-
-- Replaced temporary enchant tooltip scans and English icon-name guesses with per-instance enchant IDs, durations, charges, and spell textures. Enchants without a spell texture display a question mark.
-- Replaced equip-requirement and soulbound tooltip scans with engine readers, preserving the filter's quest/conjured exceptions.
-- Replaced supported bag-to-equipment and equipment-to-equipment pickup pairs with exact-location direct equips; replaced bag/bank pickup pairs with atomic container swaps.
-- Replaced delayed-event and periodic timer polling with cancellable ClassicAPI callbacks. Obsolete callbacks cannot consume a newer request's payload.
-- Replaced action-name scraping and compact-tooltip line scanning with item identity and durability/cooldown readers. Successful item cache fills refresh the menus.
-- Removed legacy item-use hook fallbacks, the unused mount spell dictionary, and the dead equipment-pair helper.
-- Restored the optional TrinketMenu refresh after swap state is fully released.
-- Preserved saved sets, undo, combat/death deferral, and SavedVariables declarations. That source audit established v1.15.14 capability coverage; the subsequently chosen published support floor is v1.15.15+.
-- Validation: 45 regression tests and 5 poison-swap tests, plus Lua/XML syntax, TOC and static checks. These are headless tests; in-game verification remains required.
-
-The [modernization review](CLASSICAPI_MODERNIZATION.md) records verified APIs, retained code, and the in-game test checklist.
-
-
-### Version 2.0.0 (Comprehensive ItemRack Modernization)
-
-- **Runtime Weapon Prerequisites**: Two-handed and off-hand preparation no longer rewrites saved set requirements. Replacement main-hand equipment is verified before a dependent off-hand move proceeds.
-- **Clean Failure Handling**: Full bags, unavailable equipment, and failed prerequisite moves abort the transaction and release its queue, timer, and reservation state.
-- **Authoritative Swap Verification**: Each stage checks actual equipped items and empty slots; an unrelated unlock event alone cannot advance a swap.
-- **Reconciliation and Timeouts**: A periodic check reconciles missed or delayed equipment events. Stalled stages have an explicit ten-second timeout, leaving the addon able to accept another request.
-- **Verified Current Set**: `CurrentSet` is published only after the complete requested equipment state is observed. Combat/death deferral and undo use the same completion rule.
-- **Request Ownership**: Queued requests retain their snapshots. Duplicate lifecycle events, superseded requests, and late completion events cannot publish an older request as a newer one.
-- **Deferred Work Cleanup**: Aborting or cancelling a request removes its owned deferred equipment without discarding unrelated manual queue entries.
-- **Retryable Undo**: Undo history is committed after successful completion and retained when restoration fails. Retrying a failed undo does not depend on rebuilding lost history.
-- **Runtime Scratch Requirements**: Combat and undo scratch sets stay in runtime tables. Existing SavedVariables declarations and saved-set requirements remain compatible.
-- **Structured Aura Handling**: Buff automation enumerates structured aura slots, clears stale entries, and uses enhanced-client mount state directly.
-- **Event Script Lifecycle**: Pending event payloads are released on cancellation; script failures are reported without leaking dispatch context into later events. Rebuilding a shorter event list clears stale entries.
-- **Flyout and Bank Correctness**: Menu caches account for modifiers, menu origin, bank access, and relevant options. Bank transfers use and revalidate the selected item's actual location.
-- **Dependency and Load-Graph Reconciliation**: The ClassicAPI minimum is now `v1.15.8+`, alongside SuperWoW `v2.2+` on WoW 1.12.1 Build 5875. The obsolete, unloaded `Bootstrap.lua` guard was removed, requirements were reconciled across the README and in-game help, and `Bindings.xml` retains its client-managed loading mechanism.
-- **Validation Scope**: The release has 31 headless regression tests plus Lua/XML syntax, XML callback, manifest, and static checks. These use mocked client interfaces and do not establish in-game timing, compatibility with other addons, or measured performance; in-game verification remains required.
-
-### Version 1.99.3 (Item Quality Borders)
-- **Native Quality Borders**: Items in flyout menus (`ItemRackMenu` buttons) and on the main bar (`ItemRackInv` buttons) now display crisp `UI-Tooltip-Border` rarity borders — the same vibrant palette used in Bagnon:
-  - Uncommon: Vibrant Emerald Green
-  - Rare: Radiant Electric Sky Blue
-  - Epic: Vivid Neon Purple
-  - Legendary: Flaming Orange
-- **No Additional Border Library**: Quality borders use native `SetBackdrop`; no additional library is required for this feature.
-- **Lazy Frame Creation**: `qualityBorder` sub-frames are created on demand and reused.
-- **Settings Toggle**: Added `QualityBorders` setting (ON by default) to the ItemRack settings scroll list to show or hide borders without a reload.
-- **Rack.GetItemInfo Extension**: Now returns `itemQuality` as a 5th return value, with a dual-tier resolution fallback (`GetInventoryItemQuality` → `GetItemInfo` → `C_Container.GetContainerItemID`).
-
-### Version 1.99.2 (Character Sheet Flyout Menus)
-- **PaperDoll Equipment Flyouts**: Hovering over any worn or available equipment slot in the Character Sheet (`PaperDollFrame`) displays an instant flyout menu containing all eligible items in inventory plus an empty slot for unequipped items.
-- **Side-by-Side Tooltip Layout**: Re-anchored item tooltips dynamically beside the flyout menu, preventing tooltip overlap and ensuring both worn item stats and flyout items remain fully visible.
-- **Empty Slot Unequip**: Added an explicit `(empty)` slot with an informative "Unequip" tooltip, allowing instant 1-click gear removal into the best available bag slot.
-- **Settings Toggle**: Added `CharSheetMenu` setting (toggleable in ItemRack settings) to easily enable or disable character sheet hover flyouts.
-
-### Version 1.99.1 (Inventory Trio Synergy & Hook Modernization)
-- **Non-Destructive Hooking Pipeline**: Replaced legacy global function overwrites (`UseInventoryItem = ...`, `UseAction = ...`) with native ClassicAPI `hooksecurefunc` and safe fallback.
-- **Structured Action Inspection**: Modernized `UseAction` monitoring to inspect `GetActionInfo(slot)` Item IDs directly, bypassing tooltip scanning.
-- **Public Set Inspection API**: Added `Rack.GetSetsWithItem(itemIdentifier)` to query all active equipment sets containing an item (by link, ID, or name).
-- **TrinketMenu Synchronization**: Calls `TrinketMenu.UpdateWornTrinkets()` when set swaps finish.
-- **Safe Table Traversal**: Converted legacy bank slot iterators to standard Lua `ipairs(ItemRack.BankSlots)` loops.
-
-### Version 1.99.0 (Modern Engine Stack)
-- **High-Cohesion Modular Architecture**: Eradicated the legacy `localization.lua` misnomer. Decoupled UI strings and keybindings into `Constants.lua` and automated set triggers into `Events.lua`.
-- **Module Initialization**: Initialized defensive tables (`ItemRack = ItemRack or {}`) across modules; the TOC loads data, runtime code, and then XML frames.
-- **Direct Engine Mount Detection**: Replaced legacy tooltip-scanning hacks with native C++ `IsMounted()` and `C_UnitAuras`.
-- **Lock-Sequenced Combat Queue**: Used `ITEM_LOCK_CHANGED` to advance post-combat equipment swaps. Result verification and stalled-stage timeouts are described in the v2.0.0 entry above.
-- **Enhanced Lua Syntax**: Adopted the `#` length operator and `table.wipe` supplied by the enhanced client.
-- **Library Purge**: Eradicated obsolete legacy Ace2, Dewdrop, and Tablet library dependencies (`ItemRackFu`).
-- **In-Game Help Redesign**: Updated help documentation in the `[?]` tab with explicit engine prerequisites and author attribution.
-- **Documentation Overhaul**: Modernized event scripting manual into standard Markdown (`EVENTS.md`) and eradicated legacy text files.
-
----
-
-## Credits & License
-
-- **Original Author**: Gello
-- **Modernization & Maintenance**: [Fostercare5988](https://github.com/Fostercare5988)
-- **Enhanced Client Contributors**: McPewPew, Khalil, Sleepybear
-- **License**: GNU General Public License v2 (GPL-2.0)
-
-ClassicAPI v1.15.15 compatibility: action type "equipmentset" is excluded from equipped-item use tracking. The published support minimum is v1.15.15+; no native-set import or duplicate WEAR_EQUIPMENT_SET handler is added. Verify normal spell/item actions and a ClassicAPI equipment-set action in-game after updating the DLL and restarting WoW.
+Original author: Gello. Maintained by [Fostercare5988](https://github.com/Fostercare5988). Enhanced client contributions by McPewPew, Khalil, Sleepybear. Licensed under GNU General Public License v2 (GPL-2.0).
