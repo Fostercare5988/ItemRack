@@ -55,7 +55,7 @@ ItemRack can automatically equip sets when specific game events occur (mounting,
 - Open the ItemRack Sets window and select **Events**.
 - Check the desired triggers and bind them to your saved sets.
 - Built-in mount detection uses enhanced-client `IsMounted()` telemetry.
-- For creating custom Lua event scripts, refer to the [Event Scripting Guide](../EVENTS.md).
+- For creating custom Lua event scripts, refer to the [Event Scripting Guide](EVENTS.md).
 
 ---
 

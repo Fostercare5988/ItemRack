@@ -55,7 +55,7 @@ An inventory management, equipment set, and quick-swapping add-on for World of W
 
 ---
 
-For detailed set management, bar setup, and poison swap macros, see the [User Guide](docs/USER_GUIDE.md). Custom event scripting is documented in the [Event Scripting Guide](EVENTS.md), and technical architecture notes are available in [INTEGRATION_REVIEW_2026-09-29.md](INTEGRATION_REVIEW_2026-09-29.md).
+For detailed set management, bar setup, poison swap macros, and event scripting, see the [User Guide](docs/USER_GUIDE.md).
 
 ## License & Credits
 
