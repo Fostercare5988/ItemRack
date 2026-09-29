@@ -705,7 +705,8 @@ class RegressionTests(unittest.TestCase):
             function CursorHasItem() return false end
             function GetCursorInfo() return nil end
             function ItemRack_BuildMenu() rebuilt=true end
-            Rack={ClearLockList=function() end, GetItemInfo=function() return nil,currentID end}
+            Rack={ClearLockList=function() end, GetItemInfo=function() return nil,currentID end,
+                IsEquipmentSwapActive=function() return activeSwap end}
             function Rack.FindSpace(bank) destination=bank and 'bank' or 'bags'; return 1,1 end
             moves=0
             C_Container={SwapItems=function(sourceBag,sourceSlot,bag,slot)
@@ -724,6 +725,8 @@ class RegressionTests(unittest.TestCase):
             ItemRack_Menu_OnClick('LeftButton'); assert(destination=='bags' and moves==2)
             currentID='different'; ItemRack_Menu_OnClick('LeftButton')
             assert(rebuilt and moves==2)
+            currentID='same'; activeSwap=true; ItemRack_Menu_OnClick('LeftButton')
+            assert(moves==2)
         """)
 
 

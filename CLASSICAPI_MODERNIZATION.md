@@ -1,5 +1,10 @@
 # ItemRack ClassicAPI modernization review
 
+Current checkpoint: [2026-09-29 integration review](INTEGRATION_REVIEW_2026-09-29.md).
+It includes the later accepted Dissolvent/Corrosive display override, bank
+identity/ownership corrections and 61 passing tests. The original modernization
+decisions and validation below are retained as history.
+
 ## Task
 
 - Type: modernization audit and bounded implementation.

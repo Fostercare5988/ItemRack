@@ -1398,6 +1398,15 @@ local function initialize_data()
 	ItemRack_Settings.BigCooldown = ItemRack_Settings.BigCooldown or "OFF" -- 1.9
 	ItemRack_Settings.SetLabels = ItemRack_Settings.SetLabels or "ON" -- 1.91
 	ItemRack_Settings.AutoToggle = ItemRack_Settings.AutoToggle or "OFF" -- 1.91
+	-- Old/manual numeric settings must not reach native frame setters unchanged.
+	local profile = ItemRack_Users[user]
+	for _, key in ipairs({"MainScale", "XPos", "YPos"}) do
+		local value = tonumber(profile[key])
+		if not value or value ~= value or value == math.huge or value == -math.huge or (key == "MainScale" and value <= 0) then
+			value = ItemRackOpt_Defaults[key]
+		end
+		profile[key] = value
+	end
 
 	local _,class = UnitClass("player")
 	if class=="WARRIOR" or class=="ROGUE" or class=="HUNTER" then
@@ -1585,9 +1594,13 @@ function ItemRack_OnEvent(arg1_param, arg2_param, arg3_param)
 	elseif ev=="UPDATE_BINDINGS" then
 		update_keybindings()
 
-	elseif ev=="BANKFRAME_OPENED" or ev=="PLAYERBANKSLOTS_CHANGED" then
+	elseif ev=="BANKFRAME_OPENED" then
 		cacheInvalid = true
 		Rack.BankOpened()
+		Rack.StartTimer("InvUpdate")
+	elseif ev=="PLAYERBANKSLOTS_CHANGED" then
+		cacheInvalid = true
+		Rack.PopulateBank()
 		Rack.StartTimer("InvUpdate")
 
 	elseif ev=="BANKFRAME_CLOSED" then
@@ -2151,6 +2164,7 @@ function ItemRack_Menu_OnClick(arg1)
 
 	if ItemRack.BankIsOpen then
 		if ItemRack.InvOpen~=20 then
+			if Rack.IsEquipmentSwapActive() then return end
 			if not itemID then return end
 			local sourceBag,sourceSlot = ItemRack.BaggedItems[id].bag,ItemRack.BaggedItems[id].slot
 			if not sourceBag or not sourceSlot then return end
@@ -4382,8 +4396,8 @@ function Rack.GetItemInfo(bag,slot)
 	end
 
 	if itemLink then
-		_,_,id = string.find(itemLink,"(item:%d+:%d+:%d+:%d+)")
-		_,_,itemID = string.find(id or "","item:(%d+:%d+:%d+):%d+")
+		_,_,id = string.find(itemLink,"(item:%d+:%-?%d+:%-?%d+:%-?%d+)")
+		_,_,itemID = string.find(id or "","item:(%d+:%-?%d+:%-?%d+):%-?%d+")
 		local q
 		itemName,_,q,_,_,_,_,itemSlot,itemTexture = GetItemInfo(id or itemLink)
 		itemQuality = itemQuality or q
@@ -4445,7 +4459,7 @@ end
 -- returns the name and texture of an item by its itemID
 function Rack.GetNameByID(itemID)
 	local name,texture
-	local _,_,id = string.find(itemID or "","(%d+):%d+:%d+")
+	local _,_,id = string.find(itemID or "","^(%d+):%-?%d+:%-?%d+$")
 	name,_,_,_,_,_,_,_,texture = GetItemInfo(id or "")
 	if itemID==0 then
 		name = "(empty)"
@@ -5622,15 +5636,13 @@ end
 function Rack.PopulateBank()
 	if not ItemRack.BankIsOpen then return end
 	Rack.UnpopulateBank()
-	local itemLink,itemID,equipLoc
+	local itemID,equipLoc
 	for i=1,#ItemRack.BankSlots do
 		for j=1,GetContainerNumSlots(ItemRack.BankSlots[i]) do
-			itemLink = GetContainerItemLink(ItemRack.BankSlots[i],j) or ""
-			_,_,itemID = string.find(itemLink,"(item:%d+:%d+:%d+)")
+			_,itemID,_,equipLoc = Rack.GetItemInfo(ItemRack.BankSlots[i],j)
 			if itemID then
-				_,_,_,_,_,_,_,equipLoc = GetItemInfo(itemID)
 				if equipLoc and equipLoc~="" then
-					ItemRack.BankedItems[string.gsub(itemID, "item:", "")] = 1
+					ItemRack.BankedItems[itemID] = 1
 				end
 			end
 		end
@@ -5710,10 +5722,11 @@ function Rack.GetSetsWithItem(itemIdentifier)
 end
 ItemRack.GetSetsWithItem = Rack.GetSetsWithItem
 
-function Rack.FindBankedItem(name)
+function Rack.FindBankedItem(itemID)
 	for _,i in ipairs(ItemRack.BankSlots) do
 		for j=1,GetContainerNumSlots(i) do
-			if strfind(GetContainerItemLink(i,j) or "",name,1,1) then
+			local _, currentID = Rack.GetItemInfo(i,j)
+			if itemID and currentID == itemID and not Rack.LockList[i][j] then
 				return i,j
 			end
 		end
@@ -5721,18 +5734,20 @@ function Rack.FindBankedItem(name)
 end
 
 function Rack.PullSetFromBank(setname)
-	Rack.ClearLockList()
 	local set = Rack_User[user].Sets[setname]
-	if not set or SpellIsTargeting() or GetCursorInfo() then return end
+	if not set or not ItemRack.BankIsOpen or Rack.IsEquipmentSwapActive() or SpellIsTargeting() or GetCursorInfo() then return end
+	Rack.ClearLockList()
 	local bag,slot,freeBag,freeSlot
 	for i=0,19 do
+		if not ItemRack.BankIsOpen or SpellIsTargeting() or GetCursorInfo() then return end
 		if set[i] then
 			if ItemRack.BankedItems[set[i].id] then
 				bag,slot = Rack.FindBankedItem(set[i].id)
 				if bag then
 					freeBag,freeSlot = Rack.FindSpace()
 					if freeBag then
-						C_Container.SwapItems(bag,slot,freeBag,freeSlot)
+						Rack.LockList[bag][slot] = 1
+						if not C_Container.SwapItems(bag,slot,freeBag,freeSlot) then return end
 					else
 						Rack.NoMoreRoom()
 						return
@@ -5744,20 +5759,28 @@ function Rack.PullSetFromBank(setname)
 end
 
 function Rack.PushSetToBank(setname)
-	Rack.ClearLockList()
 	local set = Rack_User[user].Sets[setname]
-	if not set or SpellIsTargeting() or GetCursorInfo() then return end
+	if not set or not ItemRack.BankIsOpen or Rack.IsEquipmentSwapActive() or SpellIsTargeting() or GetCursorInfo() then return end
+	Rack.ClearLockList()
 	local inv,bag,slot,freeBag,freeSlot
 	for i=0,19 do
-		if set[i] then
+		if not ItemRack.BankIsOpen or SpellIsTargeting() or GetCursorInfo() then return end
+		if set[i] and set[i].id ~= 0 then
 			freeBag,freeSlot = Rack.FindSpace(1)
 			if freeBag then
 				inv,bag,slot = Rack.FindItem(set[i].id,set[i].name)
+				local _, currentID
+				if inv then _, currentID = Rack.GetItemInfo(inv)
+				elseif bag then _, currentID = Rack.GetItemInfo(bag,slot) end
+				if set[i].id and currentID ~= set[i].id then return end
 				if inv then
+					Rack.LockList[-2][inv] = 1
 					PickupInventoryItem(inv)
 					PickupContainerItem(freeBag,freeSlot)
+					if CursorHasItem() then ClearCursor(); return end
 				elseif bag then
-					C_Container.SwapItems(bag,slot,freeBag,freeSlot)
+					Rack.LockList[bag][slot] = 1
+					if not C_Container.SwapItems(bag,slot,freeBag,freeSlot) then return end
 				end
 			else
 				Rack.NoMoreRoom()

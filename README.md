@@ -1,5 +1,11 @@
 # ItemRack (Enhanced 1.12.1 Client)
 
+The [2026-09-29 integration review](INTEGRATION_REVIEW_2026-09-29.md) fixes exact
+bank-transfer identity, duplicate source selection, bank/transaction ownership,
+signed item fields and malformed saved scale/coordinates. 61 Lua tests pass;
+in-game acceptance remains pending. Custom Dissolvent/Corrosive icons and the
+existing set, undo and combat policies are preserved.
+
 Required ClassicAPI version: **v1.15.15+**. This is the maintainer's published support baseline for this addon suite; it is not a claim that every API used here was introduced in v1.15.15. After replacing ClassicAPI.dll, fully restart WoW; `/reload` cannot reload a DLL.
 
 [![Interface](https://img.shields.io/badge/Interface-1.12.1%20%28Build%205875%29-blue.svg)](https://github.com/Fostercare5988/ItemRack)
